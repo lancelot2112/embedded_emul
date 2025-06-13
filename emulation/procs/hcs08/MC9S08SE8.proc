@@ -1,0 +1,6 @@
+@name MC9S08SE8
+@regbits 8
+@endian big
+@machine HCS08.mach
+@machopt BGND.machopt
+@bus S08.sysbus

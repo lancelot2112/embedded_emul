@@ -1,0 +1,5 @@
+@name TC399XE
+@regbits 32
+@endian little
+@machine tc_common.mach
+@machopt tc_131.machopt

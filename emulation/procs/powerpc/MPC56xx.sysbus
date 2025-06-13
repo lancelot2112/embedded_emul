@@ -1,0 +1,12 @@
+@name MPC56xx_sysbus
+@addrbits 32
+@hashbits 12
+
+# FLASH
+:flash 0x000000 0x400000 "Flash (4M)"
+:flash 0xEFC000 0x4000   "Flash B Shadow Block"
+:flash 0xFFC000 0x4000   "Flash A Shadow Block"
+
+#RAM
+:ram 0x40000000 0x8000  "Internal Standby SRAM (32kB)"
+:ram 0x40008000 0x38000 "Internal SRAM (224KB)"

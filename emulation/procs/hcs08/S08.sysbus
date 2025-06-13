@@ -1,0 +1,8 @@
+@name S08_sysbus
+@addrbits 16
+@hashbits 5
+
+:MMIO  0x0000 0x7F   "DIRECT-PAGE REGISTERS"
+:RAM   0x0080 0x200  "RAM"
+:MMIO  0x1800 0x60   "HIGH-PAGE REGISTERS"
+:Flash 0xE000 0x2000 "FLASH"

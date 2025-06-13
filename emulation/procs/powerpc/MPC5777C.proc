@@ -1,0 +1,6 @@
+@name MPC5777C_COBRA55
+@regbits 32
+@endian big
+@machine ppc_common.mach
+@machopt ppc_embedded.machopt
+@machopt ppc_vle.machopt

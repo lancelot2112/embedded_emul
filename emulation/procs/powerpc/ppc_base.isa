@@ -1,0 +1,228 @@
+#EREFRM_2-0.pdf
+
+#:access_levels {
+#    U descr="User mode"
+#    GS descr="Guest Supervisor"
+#    HV descr="Hypervisor"
+#}
+
+:param ENDIAN=big
+#:param REGISTER_SIZE=32
+
+##### Logical Address Spaces for Registers #####
+:space ram addr=64 word=32 type=rw align=16 endian=big
+:space reg addr=32 word=64 type=register align=16 endian=big
+:space insn addr=32 word=32 type=ro align=16 endian=big
+
+##### Registers (in logical register space) #####
+:reg GPR offset=0x0 size=64 count=32 reset=0 name=r%d
+subfields={
+#!if endian=0big
+    msb @(0-31)
+    lsb @(32-63)
+#!else
+#    msb @(32-63)
+#    lsb @(0-31)
+#!endif
+}
+
+#Special Purpose Registers
+
+#First define the entire SPR space
+:reg SPR offset=0x1000 size=64 count=1024 name=spr%d
+subfields={
+    msb @(0-31)
+    lsb @(32-63)
+}
+
+#Use the alias function to call out specific SPRs and to route them to the same backing memory
+:reg XER alias=spr1
+subfields={
+    SO @(32)    descr="Summary Overflow"
+    OV @(33)    descr="Overflow"
+    CA @(34)    descr="Carry"
+    SL @(57-63) descr="String Length"
+}
+
+#Processor Control Registers
+:reg LR alias=spr8
+:reg CTR alias=spr9
+:reg DEC alias=spr22.lsb
+:reg SRR0 alias=spr26
+:reg SRR1 alias=spr27
+:reg PID alias=spr48
+:reg DECAR alias=spr54
+:reg CSRR0 alias=spr58
+:reg CSRR1 alias=spr59
+:reg DEAR alias=spr61
+:reg ESR alias=spr62
+:reg IVPR alias=spr63
+
+#SPRG
+:reg USPRG0 alias=spr256
+:reg VRSAVE alias=spr256
+:reg SPRG0 alias=spr272
+:reg SPRG1 alias=spr273
+:reg SPRG2 alias=spr274
+:reg SPRG3 alias=spr259
+#this alias will take priority over the original definition and link them to the
+#same physical register space "spr259" as per the EREF pg.63
+:reg spr275 alias=spr259
+:reg SPRG4 alias=spr260
+:reg spr276 alias=spr260
+:reg SPRG5 alias=spr261
+:reg spr277 alias=spr261
+:reg SPRG6 alias=spr262
+:reg spr278 alias=spr262
+:reg SPRG7 alias=spr263
+:reg spr279 alias=spr263
+
+#Time Base
+:reg TB alias=spr268
+:reg TBU alias=spr268.msb
+:reg TBL alias=spr268.lsb
+:reg spr269 alias=TBL
+:reg spr284 alias=TBL
+:reg spr285 alias=TBU
+
+#Versioning
+:reg PIR alias=spr286
+:reg PVR alias=spr287
+
+#Debug Controls
+:reg DBSR alias=spr304
+:reg DBSRWR alias=spr306
+:reg EPCR alias=spr307
+:reg DBCR0 alias=spr308
+:reg DBCR1 alias=spr309
+:reg DBCR2 alias=spr310
+:reg MSRP alias=spr311
+
+#TODO: Keep adding values past 311
+
+
+
+:reg CR offset=0x900 size=4 count=8 name=cr%d
+subfields={
+    LT @(0) descr="Less Than"
+    NEG @(0) descr="Negative"
+    GT @(1) descr="Greater Than"
+    POS @(1) descr="Positive"
+    EQ @(2) descr="Equal"
+    ZERO @(2) descr="Zero"
+    SO @(3) descr="Overflow"
+}
+:reg MSR size=64 reset=0
+subfields={
+    CM @(32) descr="Computation mode"
+    WE @(45) descr="Wait state enable"
+    CE @(46) descr="Critical enable"
+    EE @(48) descr="External enable"
+    PR @(49) descr="User mode"
+    ME @(51) descr="Machine check enable"
+    DE @(54) descr="Debug interrupt enable"
+    IS @(58) descr="Instruction address space"
+    DS @(59) descr="Data address space"
+    RI @(62) descr="Recoverable interrupt"
+}
+
+:reg BUCSR size=64 reset=0
+subfields={
+    BPEN @(63)
+}
+
+###### Instruction Fields #####
+# :field 'LABEL'?'asm postfix' 'insn size':'|EXTS32|EXTS64'(base bits)||(appended bits)
+:insn size=32 subfields={
+    AA?a @(30)  op=func
+    BD @(16-29||b00)  op=exts|imm
+    BH @(19-20) op=reg.GPR
+    BI @(11-15)
+    BO @(6-10)
+    crbA @(11-15)
+    crbB @(16-20)
+    crbD @(6-10)
+    crfD @(6-8)
+    CRM @(12-19)
+    crS @(11-13)
+    CT @(6-10)
+    D @(16-31)
+    DCRN @(16-20||11-15)
+    DUI @(6-10)
+    DUIS @(11-20)
+    E @(15)
+    FM @(7-14)
+    FRT @(6-10)
+    FXM @(12-19)
+    L @(10)
+    L_OE @(15)
+    L_SYNC @(9-10)
+    LEV @(20-26)
+    LI @(6-29||b00)
+    LK?l @(31) op=func
+    MB @(21-25)
+    mb @(26||21-25)
+    me @(26||21-25)
+    ME @(26-30)
+    MO @(6-10)
+    OC @(6-20)
+    OE?o @(21) op=func
+    P @(3)
+    pmrn @(16-20||11-15)
+    rA @(11-15)
+    rB @(16-20)
+    Rc?. @(31) op=func
+    rS @(6-10)
+    SH @(16-20)
+    sh @(30||16-20)
+    SIMM @(16-31)
+    sprn @(16-20||11-15)
+    T @(9-10)
+    tbrn @(16-20||11-15)
+    TO @(6-10)
+    U @(16-19)
+    UIMM @(16-31)
+    vD @(6-10)
+    vS @(6-10)
+    WC @(9-10)
+
+# OPCODE FIELDS #
+    opc6 @(0-5) op=func
+}
+
+##### MACROS #####
+#:macro cr0flags(result) {
+
+#}
+
+#:macro setCrBit(crReg, bitIndex, bit) {
+#    shift:8 = 3-bitIndex
+#}
+#:macro carry(a,b) {
+
+#}
+
+
+
+##### INSTRUCTIONS #####
+:insn add (rD,rA,rB) mask={opc6=0b011111 OE=0 @(22-30)=0b100001010 Rc=0} descr="Add"
+#{ rD = rA + rB }
+:insn addc (rD,rA,rB,OE,Rc) mask={opc6=0b011111 @(22-30)=0b000001010} descr="Add Carrying"
+:insn adde (rD,rA,rB,OE,Rc) mask={opc6=0b011111 @(22-30)=0b010001010} descr="Add Extended"
+:insn addi (rD,rA,SIMM) mask={opc6=0b001110} descr="Add Immediate"
+:insn addic (rD,rA,SIMM) mask={opc6=0b001100} descr="Add Immediate Carrying"
+:insn addic. (rD,rA,SIMM) mask={opc6=0b001101} descr="Add Immediate Carrying and Record"
+:insn addis (rD,rA,SIMM) mask={opc6=0b001111} descr="Add Immediate Shifted"
+:insn addme (rD,rA,OE,Rc) mask={opc6=0b011111 @(22-30)=0b011101010} descr="Add to Minus One Extended"
+:insn addze (rD,rA,OE,Rc) mask={opc6=0b011111 @(22-30)=0b011001010} descr="Add to Zero Extended"
+:insn and (rA,rS,rB,Rc) mask={opc6=0b011111 @(21-30)=0b0000011100} descr="Bitwise AND"
+:insn andc (rA,rS,rB,Rc) mask={opc6=0b011111 @(21-30)=0b0000111100} descr="Bitwise AND with Complement"
+:insn andi. (rA,rS,UIMM) mask={opc6=0b011100} descr="Bitwise AND with Immediate"
+:insn andis. (rA,rS,UIMM) mask={opc6=0b011101} descr="Bitwise AND with Immediate Shifted 16bits"
+:insn b (LI,AA,LK) mask={opc6=0b010010} descr="Branch"
+:insn bc (BO,BI,BD,AA,LK) mask={opc6=0b010000} descr="Branch Conditional"
+:insn bcctr (BO,BI,LK) mask={opc6=0b010011 @(21-30)=0b1000010000} descr="Branch Conditional to Count Register"
+:insn bclr (BO,BI,LK) mask={opc6=0b010011 @(21-30)=0b0000010000} descr="Branch Conditional to Link Register"
+:insn cmp (crfD,L,rA,rB) mask={opc6=0b011111 @(21-30)=0b0000000000} descr="Compare"
+:insn cmpb (rA,rS,rB) mask={opc6=0b011111 @(21-30)=0b0111111100} descr="Compare Bytes"
+:insn cmpi (crfD,L,rA,SIMM) mask={opc6=0b001011} descr="Compare Immediate"

@@ -1,0 +1,4 @@
+##### REGISTERS #####
+
+##### INSTRUCTIONS #####
+:insn bpermd (rA,rS,rB) {opc6=b011111 func@(21-30)=b0011111100} descr="Bit Permute Doubleword"

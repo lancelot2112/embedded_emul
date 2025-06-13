@@ -1,0 +1,8 @@
+##### REGISTERS #####
+:reg MSR
+.{
+    SPV @(38) descr="SP Vector Extension Enabled"
+}
+
+##### INSTRUCTIONS #####
+:insn brinc (rD,rA,rB)

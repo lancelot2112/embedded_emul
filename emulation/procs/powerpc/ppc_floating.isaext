@@ -1,0 +1,52 @@
+###### REGISTERS ######
+:reg FPR 32of64 name="fpr%d"
+:reg FPSCR 64 ctrl descr="Floating Point Status and Control Register"
+.{
+    FX @(32)      descr="Exception summary"
+    FEX +1        descr="Enabled exception summary"
+    VX +1         descr="Invalid operation exception summary"
+    OX +1         descr="Overflow exception"
+    UX +1         descr="Underflow exception"
+    ZX +1         descr="Zero divide exception"
+    XX +1         descr="Inexact exception"
+    VXSNAN +1     descr="Invalid operation (NAN)"
+    VXISI +1      descr="Invalid operation (inf-inf)"
+    VXIDI +1      descr="Invalid operation (inf/inf)"
+    VXZDZ +1      descr="Invalid operation (0/0)"
+    VXIMZ +1      descr="Invalid operation (inf*0)"
+    VXVC +1       descr="Invalid operation (invalid compare)"
+    FR +1         descr="Fraction rounded"
+    FI +1         descr="Fraction inexact"
+
+    #Overlaps with C and FPCC
+    FPRF @(47-51) descr="Result flags"
+    C @(47)       descr="Result class"
+    FPCC +4       descr="Condition code"
+    VXSOFT @(53)  descr="Invalid operation (software request)"
+    VXSQRT +1     descr="Invalid operation (invalid square root)"
+    VXCVI +1      descr="Invalid operation (invalid integer convert)"
+    VE +1         descr="Invalid operation exception enable"
+    OE +1         descr="Overflow exception enable"
+    UE +1         descr="Underflow exception enable"
+    ZE +1         descr="Zero divide exception enable"
+    XE +1         descr="Inexect exception enable"
+    NI +1         descr="Non-IEEE mode enable"
+    RN +2         descr="Rounding control"
+}=0
+
+:reg MSR
+.{
+    FP @(50) descr="Floating-point available"
+    FE0 @(52) descr="Floating-point exception mode 0"
+    FE1 @(55) descr="Floating-point exception mode 1"
+}
+
+###### FIELDS ########
+:fields size=32
+{
+    frA @(11-15)
+    frB @(16-20)
+    frC @(21-25)
+    frD @(6-10)
+    frS @(6-10)
+}

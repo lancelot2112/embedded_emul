@@ -1,0 +1,14 @@
+@name MPC57xx_sysbus
+@addrbits 32
+@hashbits 12
+
+# FLASH
+:flash 0x000000 0x40000  "Low Flash (256k)"
+:flash 0x400000 0x4000   "UTEST (16K)"
+:flash 0x600000 0x8000   "High Flash (32K)"
+:flash 0x800000 0x800000 "Large Flash (8M)"
+
+# RAM
+:ram 0x40000000 0x10000 "Standby SRAM Port2 (64kB)"
+:ram 0x40010000 0x30000 "SRAM Port2 (192kB)"
+:ram 0x40040000 0x40000 "SRAM Port4 (256kB)"
