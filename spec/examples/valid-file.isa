@@ -1,0 +1,50 @@
+# Test file for new ISA linter architecture
+:param ENDIAN=big
+
+# Basic space definitions, each space_tag should get its own unique color
+# any fields defined in a space command context will inherit the space's tag color
+:space insn addr=32 word=32 type=ro
+#Note reg gets a different color than insn
+:space reg addr=0x20 word=64 type=register
+
+# Field definition used for naming can be used for register definitions
+# Note the :reg tag should have the same color as the reg space tag.  The colon
+# should still be the basic command color.
+:reg GPR[0-31] size=32
+
+# An redirect of a previously named field (GPR[0-31] above provides GPR0, GPR1, ..., GPR31)
+# fields and subfields should get the same color as the space they are defined in.
+:reg XOM redirect=GPR4
+subfields={
+    OV @(0-4) descr="Overflow Flag"
+    EXCEPT @(5-9) descr="Exception Flag"
+    Other @(10-14) descr="Other Flags"
+
+    #spaces and commits in a subcontext
+    andThis @(15-19) descr="And This Flag"
+}
+
+# Until another :command is encountered, the previous command context is used
+
+# Fields in an unnamed field block with a multi-line subfield
+:insn size=32 subfields={
+    OP @(0-5)
+    rA @(11-15) op=reg::GPR
+    rB @(16-20) op=reg::GPR
+    rD @(6-10) op=reg::GPR
+
+    #example of a single character tag
+    OE @(21) op=func
+    Rc @(31) op=func
+
+    # A more complicated bit field definition
+    pmrn @(?1||16-20||11-15||0b00)
+}
+
+# Instruction definition with args, mask and semantics
+#note that the fields are defined in the unnamed instruction command
+# and that the size matches the base word size of the space {32}
+:insn add (rD,rA,rB) mask={OP=0b011111 OE=0 @(22-30)=0b100001010 Rc=0} semantics={
+    #Another multi-line context window
+    rD = rA + rB
+}

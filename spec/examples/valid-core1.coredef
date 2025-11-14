@@ -1,0 +1,3 @@
+:include ./valid-isa.isa
+
+#Define a number of new spaces specific to system

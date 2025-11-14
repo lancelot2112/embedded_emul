@@ -1,0 +1,191 @@
+# Test cases for complex instruction form scenarios
+# This file contains various test cases to validate instruction forms functionality
+# including edge cases, error conditions, and complex disambiguation scenarios
+
+:param ENDIAN=big
+
+# Test setup: Define register spaces
+:space reg addr=32 word=64 type=register
+:reg GPR count=32 name=r%d descr="General Purpose Registers"
+:reg FPR count=32 name=f%d descr="Floating Point Registers"
+
+# Test setup: Define logic space for instruction forms
+:space test_insn type=logic size=32 endian=big
+
+# TEST CASE 1: Basic form definition and typing
+# EXPECTED: Forms should be defined correctly with proper field layouts
+:test_insn Basic_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    RA @(11-15) op=source|reg.GPR descr="Source register A"
+    RB @(16-20) op=source|reg.GPR descr="Source register B"
+    XO @(21-30) op=func descr="Extended opcode"
+    Rc @(31) op=func descr="Record condition"
+}
+
+# TEST CASE 2: Form inheritance with overlap
+# EXPECTED: Child form should inherit parent fields and add new ones
+# WARNING: OE field overlaps with inherited XO field
+:test_insn::Basic_Form Extended_Form subfields={
+    OE @(21) op=func descr="Overflow enable"
+    # This overlaps with XO @(21-30) from Basic_Form - should generate warning
+}
+
+# TEST CASE 3: Multiple instruction variants with same mnemonic
+# EXPECTED: Each variant should be distinguishable by mask patterns
+:test_insn::Basic_Form test_add mask={OPCD=31, XO=266, Rc=0} descr="Add basic"
+:test_insn::Basic_Form test_add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record"
+:test_insn::Extended_Form test_addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow"
+
+# TEST CASE 4: Operand override testing
+# EXPECTED: Explicit operand list should override automatic inference
+:test_insn::Basic_Form test_mr (RT, RA) mask={OPCD=31, XO=444, RB=0, Rc=0} descr="Move register with override"
+
+# TEST CASE 5: Complex mask disambiguation
+# EXPECTED: Instructions should be uniquely identifiable despite similar patterns
+:test_insn::Basic_Form test_and mask={OPCD=31, XO=28, Rc=0} descr="AND operation"
+:test_insn::Basic_Form test_andc mask={OPCD=31, XO=60, Rc=0} descr="AND complement"
+:test_insn::Basic_Form test_nand mask={OPCD=31, XO=476, Rc=0} descr="NAND operation"
+
+# TEST CASE 6: D-Form for immediate operations
+:test_insn D_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    RA @(11-15) op=source|reg.GPR descr="Source register"
+    IMM @(16-31) op=immediate descr="Immediate value"
+}
+
+:test_insn::D_Form test_addi mask={OPCD=14} descr="Add immediate"
+:test_insn::D_Form test_lwz mask={OPCD=32} descr="Load word and zero"
+
+# TEST CASE 7: Branch form with postfix modifiers
+:test_insn Branch_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    LI @(6-29) op=immediate descr="Branch target"
+    AA?a @(30) op=func descr="Absolute address flag"
+    LK?l @(31) op=func descr="Link flag"
+}
+
+:test_insn::Branch_Form test_b mask={OPCD=18, AA=0, LK=0} descr="Branch"
+:test_insn::Branch_Form test_ba mask={OPCD=18, AA=1, LK=0} descr="Branch absolute"
+:test_insn::Branch_Form test_bl mask={OPCD=18, AA=0, LK=1} descr="Branch and link"
+
+# TEST CASE 8: Multi-level inheritance
+:test_insn::Extended_Form Super_Extended subfields={
+    EXTRA @(30) op=func descr="Extra control bit"
+    # This form inherits from Extended_Form which inherits from Basic_Form
+}
+
+:test_insn::Super_Extended test_complex mask={OPCD=31, XO=100, OE=1, EXTRA=1, Rc=0} descr="Complex inherited instruction"
+
+# TEST CASE 9: Forms with different register file targeting
+:test_insn FP_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    FRT @(6-10) op=target|reg.FPR descr="FP target register"
+    FRA @(11-15) op=source|reg.FPR descr="FP source register A"
+    FRB @(16-20) op=source|reg.FPR descr="FP source register B"
+    XO @(21-30) op=func descr="Extended opcode"
+    Rc @(31) op=func descr="Record condition"
+}
+
+:test_insn::FP_Form test_fadd mask={OPCD=63, XO=21, Rc=0} descr="Floating point add"
+
+# TEST CASE 10: Edge case - minimal mask specification
+:test_insn Minimal_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode only"
+    DATA @(6-31) op=immediate descr="Large immediate field"
+}
+
+:test_insn::Minimal_Form test_minimal mask={OPCD=50} descr="Minimal mask instruction"
+
+# ERROR TEST CASES (commented out to prevent actual errors)
+
+# ERROR CASE 1: Cross-space form typing (should fail)
+# :reg::Basic_Form invalid_cross_space mask={OPCD=1}
+
+# ERROR CASE 2: Non-existent form reference (should fail)  
+# :test_insn::NonExistent_Form invalid_form mask={OPCD=2}
+
+# ERROR CASE 3: Invalid mask field reference (should fail)
+# :test_insn::Basic_Form invalid_mask mask={INVALID_FIELD=1}
+
+# ERROR CASE 4: Circular inheritance (should fail)
+# :test_insn::Circular_A Circular_B subfields={ F1 @(0) op=func }
+# :test_insn::Circular_B Circular_A subfields={ F2 @(1) op=func }
+
+# ERROR CASE 5: Logic space with offset attribute (should fail)
+# :space invalid_logic type=logic size=32 offset=0x1000
+
+# VALIDATION TEST CASES
+
+# TEST CASE 11: Ambiguous instruction encoding detection
+# These should trigger warnings/errors about mask conflicts
+:test_insn Conflict_Form subfields={
+    OPCD @(0-5) op=func
+    FIELD_A @(6-10) op=func
+    FIELD_B @(11-15) op=func
+}
+
+# These two instructions have identical masks - should trigger error
+:test_insn::Conflict_Form test_conflict1 mask={OPCD=40, FIELD_A=1} descr="Conflict instruction 1"
+:test_insn::Conflict_Form test_conflict1 mask={OPCD=40, FIELD_A=1} descr="Conflict instruction 1 duplicate"
+
+# TEST CASE 12: Incomplete mask specification
+# Should trigger warnings about insufficient disambiguation
+:test_insn::Basic_Form test_incomplete mask={OPCD=31} descr="Incomplete mask - missing XO"
+
+# TEST CASE 13: Maximum bit range testing
+:test_insn Full_Width subfields={
+    BIT_0 @(0) op=func descr="First bit"
+    MIDDLE @(1-30) op=immediate descr="Middle section"
+    BIT_31 @(31) op=func descr="Last bit"
+}
+
+:test_insn::Full_Width test_full mask={BIT_0=1, MIDDLE=0x3FFFFFFF, BIT_31=0} descr="Full width test"
+
+# TEST CASE 14: Sign extension and bit concatenation
+:test_insn Complex_Bits subfields={
+    OPCD @(0-5) op=func
+    CONCAT @(6-10|26-30) op=immediate descr="Concatenated field"
+    SIGN_EXT @(?1|11-25) op=immediate descr="Sign extended field"
+}
+
+:test_insn::Complex_Bits test_bits mask={OPCD=45} descr="Complex bit manipulation"
+
+# TEST CASE 15: Performance optimization scenarios
+# Many instructions sharing primary opcode for lookup table testing
+:test_insn Shared_OPCD subfields={
+    OPCD @(0-5) op=func
+    SUB_OP @(6-15) op=func
+    DATA @(16-31) op=immediate
+}
+
+:test_insn::Shared_OPCD test_shared1 mask={OPCD=60, SUB_OP=1} descr="Shared opcode 1"
+:test_insn::Shared_OPCD test_shared2 mask={OPCD=60, SUB_OP=2} descr="Shared opcode 2"
+:test_insn::Shared_OPCD test_shared3 mask={OPCD=60, SUB_OP=3} descr="Shared opcode 3"
+:test_insn::Shared_OPCD test_shared4 mask={OPCD=60, SUB_OP=4} descr="Shared opcode 4"
+
+# TEST CASE 16: Legacy and typed instruction coexistence
+# Legacy instruction definition (should coexist with typed instructions)
+:test_insn legacy_test (RT, RA, RB) mask={@(0-31)=0x12345678} descr="Legacy instruction definition"
+
+# TEST CASE 17: Register file validation
+:test_insn Register_Test subfields={
+    OPCD @(0-5) op=func
+    GPR_REG @(6-10) op=target|reg.GPR descr="GPR reference"
+    FPR_REG @(11-15) op=source|reg.FPR descr="FPR reference"
+    IMM_VAL @(16-31) op=immediate descr="Immediate value"
+}
+
+:test_insn::Register_Test test_regs mask={OPCD=55} descr="Register file testing"
+
+# TEST CASE 18: Boundary condition testing
+# Test minimum and maximum register indices
+:test_insn Boundary_Form subfields={
+    OPCD @(0-5) op=func
+    REG_MIN @(6-10) op=target|reg.GPR descr="Minimum register (should be 0)"
+    REG_MAX @(11-15) op=target|reg.GPR descr="Maximum register (should be 31)"
+    RESERVED @(16-31) op=func descr="Reserved field"
+}
+
+:test_insn::Boundary_Form test_boundary mask={OPCD=56, REG_MIN=0, REG_MAX=31} descr="Boundary testing"

@@ -1,0 +1,56 @@
+
+#Valid space definition of register type
+#`reg` should have a color assigned
+:space reg addr=32 word=64 type=register align=16 endian=big
+#`other` should have a different color assigned
+:space other addr=32 word=32 type=ro
+
+#First define the entire SPR space using new bracket notation
+:reg SPR[0-1023] offset=0x1000 size=64 subfields={
+    msb @(0-31)
+    lsb @(32-63)
+}
+
+#VALID CASES
+# can redirect the generated SPR9 (from SPR[0-1023])
+# symbol reference `SPR9` should be colored the same as `SPR` and `reg`
+:reg CTR redirect=SPR9
+
+# can redirect a subfield of SPR22 (from SPR[0-1023])
+# symbol references SPR22 and lsb should have the same coloring as `SPR` and `reg`
+# the semicolon inside SPR22::lsb should be highlighted as context operator
+:reg DEC redirect=SPR22::lsb
+
+# ERROR CASES
+# Should indicate field name is not available (only range 0-1023 which maxes at SPR1023)
+# Only SPR1024 should be underlined and it shouldn't have a color
+:reg NAME_NOT_DEFINED redirect=SPR1024
+
+# Should indicate subfield not available
+# Only ::NDF should be underlined and it shouldn't be colored (SPR22 should still be colored)
+:reg SUBFIELD_NOT_DEFINED redirect=SPR22::NDF
+
+:other size=16 subfields={
+    AA @(15) descr="Addressing mode (0=Relative, 1=Absolute)"
+    opcd5 @(0-5) descr="Opcode (6bits)"
+    overlap @(?1|5-8|4|0b00) descr="Field that overlaps with opcd5"
+}
+
+#VALID INSTRUCTIONS
+# this instruction is valid
+:other testinsn (overlap,AA) mask={opcd5=0b110110 AA=1} size=16
+
+#this instruction is 32 bit (default space size) but is using size 16 fields, should be valid
+#since 32 > 16.  NOTE: the name tag includes a . which should be valid
+# Accessing SPR22::lsb validly by first referencing the space using the $<spacetag> context operator
+:other insn32bit. (overlap,AA) mask={opcd5=0b111 @(31)=1 $reg::SPR22::lsb=1}
+
+#INVALID
+# ERR1 uses a field that's not defined in our space 'not_def' should be underlined.
+# ERR2 opcd5 in the mask is checked against a valid binary number but the binary has too many
+#bits!  the number should have a warning indicating there are more bits defined than the field has available.
+# ERR3 AA is checked against 0b5 which is an invalid binary number.  0b5 should be underlined.
+# ERR4 tries to reference a field name not defined in this space.  Needs to access that register
+# by first naming the space then referencing the field `$reg::SPR22::lsb
+
+:other invinsn (not_def,AA) mask={opcd5=0b1111111 AA=0b5 SPR22::lsb=1}

@@ -1,0 +1,110 @@
+# Example file demonstrating instruction forms and multiple instruction variants
+# This example shows how the same instruction mnemonic can have multiple forms
+# with different operand patterns using the instruction forms feature.
+
+# Define parameter for endianness
+:param ENDIAN=big
+
+# Define register space for PowerPC-style GPRs
+:space reg addr=32 word=64 type=register align=64 endian=big
+
+# Define general-purpose registers
+:reg GPR offset=0x0 size=64 count=32 name=r%d reset=0x0 descr="General Purpose Registers"
+
+# Define logic space for instruction forms and typed instructions
+:space powerpc_insn type=logic size=32 endian=big
+
+# Define instruction forms for different encoding patterns
+
+# X-Form: Register-to-register operations with extended opcode
+:powerpc_insn X_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"  
+    RA @(11-15) op=source|reg.GPR descr="Source register A"
+    RB @(16-20) op=source|reg.GPR descr="Source register B"
+    XO @(21-30) op=func descr="Extended opcode"
+    Rc @(31) op=func descr="Record condition"
+}
+
+# D-Form: Register with immediate displacement
+:powerpc_insn D_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    RA @(11-15) op=source|reg.GPR descr="Source register"
+    D @(16-31) op=immediate descr="Displacement/Immediate"
+}
+
+# I-Form: Branch instructions with large immediate
+:powerpc_insn I_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    LI @(6-29) op=immediate descr="Immediate value"
+    AA @(30) op=func descr="Absolute address"
+    LK @(31) op=func descr="Link bit"
+}
+
+# XO-Form: Inherited from X-Form with overflow enable
+:powerpc_insn::X_Form XO_Form subfields={
+    OE @(21) op=func descr="Overflow enable"
+    # Note: OE overlaps with XO @(21-30) - this generates a warning
+    # but both fields coexist for different instruction variants
+}
+
+# GOOD EXAMPLES: Multiple forms for the same instruction mnemonic
+
+# ADD instruction variants using different forms
+:powerpc_insn::X_Form add mask={OPCD=31, XO=266, Rc=0} descr="Add (X-Form)"
+:powerpc_insn::X_Form add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record (X-Form)"
+:powerpc_insn::XO_Form addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow (XO-Form)"
+:powerpc_insn::XO_Form addo. mask={OPCD=31, XO=266, OE=1, Rc=1} descr="Add with overflow and record (XO-Form)"
+:powerpc_insn::D_Form addi mask={OPCD=14} descr="Add immediate (D-Form)"
+
+# LOAD instruction variants using different forms
+:powerpc_insn::D_Form lwz mask={OPCD=32} descr="Load word and zero (D-Form)"
+:powerpc_insn::X_Form lwzx mask={OPCD=31, XO=23, Rc=0} descr="Load word and zero indexed (X-Form)"
+
+# BRANCH instruction variants using different forms
+:powerpc_insn::I_Form b mask={OPCD=18, AA=0, LK=0} descr="Branch (I-Form)"
+:powerpc_insn::I_Form ba mask={OPCD=18, AA=1, LK=0} descr="Branch absolute (I-Form)"
+:powerpc_insn::I_Form bl mask={OPCD=18, AA=0, LK=1} descr="Branch and link (I-Form)"
+
+# MOVE instruction with explicit operand override
+# mr (move register) uses X-Form but only needs RT and RA operands
+:powerpc_insn::X_Form mr (RT, RA) mask={OPCD=31, XO=444, RB=0, Rc=0} descr="Move register (operand override)"
+
+# GOOD EXAMPLES: Form inheritance demonstrates overlap handling
+:powerpc_insn::XO_Form mullwo mask={OPCD=31, XO=235, OE=1, Rc=0} descr="Multiply low word with overflow"
+:powerpc_insn::X_Form mullw mask={OPCD=31, XO=235, Rc=0} descr="Multiply low word"
+
+# GOOD EXAMPLES: Automatic operand inference
+# These instructions automatically get operands from their form definitions:
+# - X_Form instructions get (RT, RA, RB) - three register operands
+# - D_Form instructions get (RT, RA, D) - two registers plus immediate
+# - I_Form instructions get (LI) - one immediate operand (AA, LK are func type)
+
+# GOOD EXAMPLES: Mixed approach during migration
+# Legacy instruction definition can coexist with typed instructions
+:powerpc_insn legacy_add (RT, RA, RB) mask={@(0-31)=0x7C000214} descr="Legacy definition without forms"
+
+# BAD EXAMPLE (commented out): Cross-space typing attempt
+# :reg;X_Form invalid_instruction  # ERROR: Cannot type with forms from different spaces
+
+# BAD EXAMPLE (commented out): Invalid form reference
+# :powerpc_insn::NonExistent_Form invalid mask={OPCD=0}  # ERROR: Form not defined
+
+# BAD EXAMPLE (commented out): Invalid mask field reference
+# :powerpc_insn::X_Form invalid_mask mask={INVALID_FIELD=1}  # ERROR: Field not in form
+
+# GOOD EXAMPLES: Complex instruction variants demonstrating disambiguation
+# These show how masks differentiate between similar instruction encodings
+
+# Comparison instructions with different immediate handling
+:powerpc_insn::D_Form cmpi mask={OPCD=11} descr="Compare immediate"
+:powerpc_insn::X_Form cmp mask={OPCD=31, XO=0, Rc=0} descr="Compare"
+
+# Store instructions with different addressing modes
+:powerpc_insn::D_Form stw mask={OPCD=36} descr="Store word (D-Form displacement)"
+:powerpc_insn::X_Form stwx mask={OPCD=31, XO=151, Rc=0} descr="Store word indexed (X-Form)"
+
+# Rotate and shift instructions sharing similar opcodes but different forms
+:powerpc_insn::X_Form slw mask={OPCD=31, XO=24, Rc=0} descr="Shift left word"
+:powerpc_insn::X_Form slw. mask={OPCD=31, XO=24, Rc=1} descr="Shift left word and record"

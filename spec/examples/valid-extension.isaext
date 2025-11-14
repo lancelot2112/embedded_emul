@@ -1,0 +1,11 @@
+
+#add subfields to a field {MSR} and space {reg} defined in another file
+#(DOES NOT REPLACE THE PREVIOUSLY DEFINED SUBFIELDS)
+#track reg as a external space and MSR as an external field
+# another file will need to provide.
+:reg MSR subfields={
+    NEWOV @(31) descr="Overflow Flag for MPC5777C proc"
+}
+
+#Add a redirect of an external field
+:reg NEWALIAS redirect=r1

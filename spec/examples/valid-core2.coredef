@@ -1,0 +1,10 @@
+:include ./valid-isa.isa
+:include ./valid-extension.isaext
+
+#Define a number of new spaces specific to core
+:space etpu_ram addr=16 word=24 type=rw align=32 endian=big
+
+#Map the spaces to a system bus definition
+:bus sysbus addr=32 ranges={
+    0xC3F80000_0x10000->etpu
+}

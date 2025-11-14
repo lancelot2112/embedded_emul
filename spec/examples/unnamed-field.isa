@@ -1,0 +1,18 @@
+# Test file for unnamed field definition
+:param ENDIAN=big
+
+# Test space definition
+:space insn addr=32 word=32 type=ro
+
+# This should work - unnamed field definition with space-scoped subfields
+:insn size=32 subfields={
+    AA @(30) op=func descr="Absolute Address flag, bit 30"
+    BD @(16-29|0b00) op=imm descr="Displacement, bits 16-29, padded with 00b"
+    rA @(11-15) op=insn::GPR descr="Register A, bits 11-15, is a GPR"
+    opc6 @(0-5) op=func descr="Primary 6-bit opcode field, bits 0-5"
+}
+
+# Instruction referencing the subfields defined above
+# rD and rB should be underlined and have default coloring as they are not defined
+# Note AA should be valid (the `?a` above is not part of the symbol name)
+:insn add (rD,rA,rB) mask={opc6=0b011111 BD=0b00 AA=1} descr="Add instruction"

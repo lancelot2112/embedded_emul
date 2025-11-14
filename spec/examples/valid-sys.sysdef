@@ -1,0 +1,22 @@
+#one core of type valid-core1
+:attach CORE0 ./valid-core1.core
+
+#two cores of type valid-core2
+:attach ETPUA ./valid-core2.core
+:attach ETPUB ./valid-core2.core
+
+#define a number of system spaces
+:space small_flash addr=32 word=32 type=ro align=12 endian=big
+:space large_flash addr=32 word=32 type=ro align=12 endian=big
+:space ram addr=32 word=32 type=rw align=16 endian=big
+
+#Map the spaces to a system bus definition
+:bus sysbus addr=32 ranges={
+    0x0_0x40000->small_flash
+    0x800000_0x800000->large_flash
+    0x40000000_0x80000->ram
+    #overlaps with a previous definition is a subrange of a previously mapped space
+    #acts as an image of the redirected space called by "offset"
+    0x40000400_0x400->ram offset=0x1080 prio=1 # flash image in ram space
+    0xC3F80000_0x10000->etpu
+}

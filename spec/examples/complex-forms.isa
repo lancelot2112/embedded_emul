@@ -1,0 +1,153 @@
+# Complex instruction forms example demonstrating inheritance and disambiguation
+# This example shows advanced use cases for instruction forms including:
+# - Form inheritance with field overlaps
+# - Complex mask disambiguation
+# - Multiple instruction variants with same mnemonic
+# - Edge cases and validation scenarios
+
+:param ENDIAN=big
+
+# Define register spaces
+:space reg addr=32 word=64 type=register
+:reg GPR count=32 name=r%d descr="General Purpose Registers"
+:reg FPR count=32 name=f%d descr="Floating Point Registers"
+:reg SPR count=1024 name=spr%d descr="Special Purpose Registers"
+
+# Define logic space for complex instruction forms
+:space complex_insn type=logic size=32 endian=big
+
+# Base form for arithmetic operations
+:complex_insn Arith_Base subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    RA @(11-15) op=source|reg.GPR descr="Source register A"
+    RB @(16-20) op=source|reg.GPR descr="Source register B"
+    Rc @(31) op=func descr="Record condition"
+}
+
+# Extended arithmetic form with overflow detection
+:complex_insn::Arith_Base Arith_OE subfields={
+    OE @(21) op=func descr="Overflow enable"
+    XO @(22-30) op=func descr="Extended opcode"
+    # Note: This creates a different XO field layout than typical X-Form
+}
+
+# Standard X-Form for comparison
+:complex_insn X_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    RA @(11-15) op=source|reg.GPR descr="Source register A"
+    RB @(16-20) op=source|reg.GPR descr="Source register B"
+    XO @(21-30) op=func descr="Extended opcode"
+    Rc @(31) op=func descr="Record condition"
+}
+
+# Floating point form inheriting from X-Form but targeting FPR
+:complex_insn::X_Form FP_Form subfields={
+    FRT @(6-10) op=target|reg.FPR descr="FP Target register"
+    FRA @(11-15) op=source|reg.FPR descr="FP Source register A"
+    FRB @(16-20) op=source|reg.FPR descr="FP Source register B"
+    # Note: These overlap with inherited RT, RA, RB but target different register files
+}
+
+# Memory access form with multiple addressing modes
+:complex_insn Mem_Base subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    RA @(11-15) op=source|reg.GPR descr="Base address register"
+}
+
+# Displacement addressing (D-Form variant)
+:complex_insn::Mem_Base Mem_Disp subfields={
+    D @(16-31) op=immediate descr="Displacement"
+}
+
+# Indexed addressing (X-Form variant)
+:complex_insn::Mem_Base Mem_Index subfields={
+    RB @(16-20) op=source|reg.GPR descr="Index register"
+    XO @(21-30) op=func descr="Extended opcode"
+    Rc @(31) op=func descr="Record condition"
+}
+
+# GOOD EXAMPLES: Complex instruction disambiguation
+
+# ADD instruction family with multiple forms and variants
+:complex_insn::Arith_Base add mask={OPCD=31, XO=266, Rc=0} descr="Add (base form)"
+:complex_insn::Arith_Base add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record"
+:complex_insn::Arith_OE addo mask={OPCD=31, OE=1, XO=266, Rc=0} descr="Add with overflow"
+:complex_insn::Arith_OE addo. mask={OPCD=31, OE=1, XO=266, Rc=1} descr="Add with overflow and record"
+
+# Demonstrates same mnemonic with different forms requiring different masks
+:complex_insn::X_Form add_alt mask={OPCD=31, XO=524, Rc=0} descr="Add alternative encoding"
+
+# SUBTRACT instruction family showing inheritance benefits
+:complex_insn::Arith_Base sub mask={OPCD=31, XO=40, Rc=0} descr="Subtract"
+:complex_insn::Arith_OE subo mask={OPCD=31, OE=1, XO=40, Rc=0} descr="Subtract with overflow"
+
+# MULTIPLY instructions with complex disambiguation
+:complex_insn::Arith_Base mullw mask={OPCD=31, XO=235, Rc=0} descr="Multiply low word"
+:complex_insn::Arith_OE mullwo mask={OPCD=31, OE=1, XO=235, Rc=0} descr="Multiply low word with overflow"
+:complex_insn::X_Form mulhw mask={OPCD=31, XO=75, Rc=0} descr="Multiply high word"
+
+# FLOATING POINT instructions demonstrating register file targeting
+:complex_insn::FP_Form fadd mask={OPCD=63, XO=21, Rc=0} descr="Floating add"
+:complex_insn::FP_Form fadd. mask={OPCD=63, XO=21, Rc=1} descr="Floating add and record"
+:complex_insn::FP_Form fsub mask={OPCD=63, XO=20, Rc=0} descr="Floating subtract"
+
+# LOAD/STORE instructions with multiple addressing modes
+:complex_insn::Mem_Disp lwz mask={OPCD=32} descr="Load word and zero (displacement)"
+:complex_insn::Mem_Index lwzx mask={OPCD=31, XO=23, Rc=0} descr="Load word and zero indexed"
+:complex_insn::Mem_Disp stw mask={OPCD=36} descr="Store word (displacement)"
+:complex_insn::Mem_Index stwx mask={OPCD=31, XO=151, Rc=0} descr="Store word indexed"
+
+# GOOD EXAMPLES: Operand override for special cases
+# Some instructions need explicit operand lists despite form inference
+:complex_insn::X_Form mr (RT, RA) mask={OPCD=31, XO=444, RB=0, Rc=0} descr="Move register"
+:complex_insn::Mem_Index dcbz (RA, RB) mask={OPCD=31, XO=1014, RT=0, Rc=0} descr="Data cache block zero"
+
+# GOOD EXAMPLES: Complex mask specifications for disambiguation
+# Instructions that require multiple mask fields for proper identification
+:complex_insn::X_Form cmp mask={OPCD=31, XO=0, RT=0, Rc=0} descr="Compare word"
+:complex_insn::X_Form cmpl mask={OPCD=31, XO=32, RT=0, Rc=0} descr="Compare logical word"
+
+# GOOD EXAMPLES: Instructions with overlapping but distinct encodings
+:complex_insn::Arith_Base and mask={OPCD=31, XO=28, Rc=0} descr="AND"
+:complex_insn::Arith_Base andc mask={OPCD=31, XO=60, Rc=0} descr="AND with complement"
+:complex_insn::Arith_Base nand mask={OPCD=31, XO=476, Rc=0} descr="NAND"
+
+# GOOD EXAMPLES: Branch prediction and condition variants
+# Showing how forms can handle complex instruction variants
+:complex_insn Branch_Cond subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    BO @(6-10) op=func descr="Branch options"
+    BI @(11-15) op=func descr="Branch condition"
+    BD @(16-29) op=immediate descr="Branch displacement"
+    AA @(30) op=func descr="Absolute address"
+    LK @(31) op=func descr="Link"
+}
+
+:complex_insn::Branch_Cond bc mask={OPCD=16, AA=0, LK=0} descr="Branch conditional"
+:complex_insn::Branch_Cond bca mask={OPCD=16, AA=1, LK=0} descr="Branch conditional absolute"
+:complex_insn::Branch_Cond bcl mask={OPCD=16, AA=0, LK=1} descr="Branch conditional and link"
+
+# GOOD EXAMPLES: System instructions with special register access
+:complex_insn SPR_Form subfields={
+    OPCD @(0-5) op=func descr="Primary opcode"
+    RT @(6-10) op=target|reg.GPR descr="Target register"
+    SPR @(11-20) op=source|reg.SPR descr="Special purpose register"
+    XO @(21-30) op=func descr="Extended opcode"
+    Rc @(31) op=func descr="Record condition"
+}
+
+:complex_insn::SPR_Form mfspr mask={OPCD=31, XO=339, Rc=0} descr="Move from special purpose register"
+:complex_insn::SPR_Form mtspr mask={OPCD=31, XO=467, Rc=0} descr="Move to special purpose register"
+
+# EDGE CASES: Complex disambiguation scenarios
+
+# Instructions where masks must be very specific to avoid conflicts
+:complex_insn::X_Form sync mask={OPCD=31, RT=0, RA=0, RB=0, XO=598, Rc=0} descr="Synchronize"
+:complex_insn::X_Form isync mask={OPCD=19, RT=0, RA=0, RB=0, XO=150, Rc=0} descr="Instruction synchronize"
+
+# Instructions demonstrating the need for multiple mask constraints
+:complex_insn::X_Form tlbie mask={OPCD=31, RT=0, XO=306, Rc=0} descr="TLB invalidate entry"
+:complex_insn::X_Form tlbia mask={OPCD=31, RT=0, RA=0, RB=0, XO=370, Rc=0} descr="TLB invalidate all"

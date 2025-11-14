@@ -1,0 +1,61 @@
+# Index Operator Examples - Demonstrating [startindex-endindex] syntax
+# This file showcases the new bracket notation for defining register arrays
+
+:param ENDIAN=big
+:param REGISTER_SIZE=64
+
+:space reg addr=32 word=64 type=register
+
+# Basic index operator examples
+:reg GPR[0-31] offset=0x0 size=64 reset=0 descr="General Purpose Registers"
+# This creates: GPR0, GPR1, GPR2, ..., GPR31
+
+:reg FPR[0-31] offset=0x200 size=64 reset=0 descr="Floating Point Registers"
+# This creates: FPR0, FPR1, FPR2, ..., FPR31
+
+# Index range starting from non-zero
+:reg SPR[256-511] offset=0x1000 size=32 descr="Special Purpose Registers"
+# This creates: SPR256, SPR257, SPR258, ..., SPR511
+
+# Hexadecimal indices
+:reg MSR[0x0-0xF] offset=0x2000 size=64 descr="Machine State Registers"
+# This creates: MSR0, MSR1, MSR2, ..., MSR15
+
+# Binary indices (less practical but valid)
+:reg FLAGS[0b0-0b111] offset=0x3000 size=8 descr="Flag Registers"
+# This creates: FLAGS0, FLAGS1, FLAGS2, ..., FLAGS7
+
+# Octal indices
+:reg CTRL[0o0-0o17] offset=0x4000 size=32 descr="Control Registers"
+# This creates: CTRL0, CTRL1, CTRL2, ..., CTRL15
+
+# Single register (no indexing)
+:reg PC offset=0x5000 size=64 reset=0 descr="Program Counter"
+
+# Aliases to indexed registers
+:reg SP alias=GPR1 descr="Stack Pointer"
+:reg LR alias=GPR31 descr="Link Register"
+:reg CTR alias=SPR256 descr="Count Register"
+
+# Register with subfields and indexing
+:reg CR[0-7] offset=0x6000 size=4 descr="Condition Registers" subfields={
+    LT @(0) descr="Less Than"
+    GT @(1) descr="Greater Than"
+    EQ @(2) descr="Equal"
+    SO @(3) descr="Summary Overflow"
+}
+
+# Valid alias examples referencing indexed fields
+:reg CR0_LT alias=CR0::LT descr="Condition Register 0 Less Than bit"
+:reg CR7_SO alias=CR7::SO descr="Condition Register 7 Summary Overflow bit"
+
+# Small index range
+:reg SMALL[10-12] offset=0x7000 size=16 descr="Small register range"
+# This creates: SMALL10, SMALL11, SMALL12
+
+# These would be validation errors (commented out):
+# :reg INVALID[31-0] # Error: start_index > end_index
+# :reg INVALID2[-1-10] # Error: negative start_index
+# :reg INVALID3[0-65536] # Error: count exceeds maximum (65535)
+# :reg INVALID4[0-31] count=32 # Error: bracket notation with count attribute
+# :reg INVALID5[0-31] name=r%d # Error: bracket notation with name attribute

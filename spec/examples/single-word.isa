@@ -1,0 +1,20 @@
+:space reg addr=32 word=64 type=register
+
+# Te-S_T. is valid
+:reg Te-S_T. size=32 subfields={
+    #invalid single word, `E\` should be underlined
+    E\ @(1)
+    # Valid single words `FIELD1`, `Fi_EL-d3.`, `a.` and `F` should all have the same color as `reg`
+    FIELD1 @(0)
+    Fi_EL-d3. @(2)
+    a. @(3)
+    F @(4)
+    #invalid single words, `abs/-()` should be underlined and default color
+    abc/-() @(5)
+}
+
+#Redirect of the weirdly named `Te-S_T.`;`F` above
+# Colored `Te-S_T.` same as `reg` and valid
+# Highlighted `::` since it's the context operator
+# Colored `F` since it's a valid subfield of `Te-S_T.`
+:reg FIELD redirect=Te-S_T.::F
