@@ -1,6 +1,5 @@
 ##### REGISTERS #####
-:reg MSR
-.{
+:reg MSR subfields={
     SPV @(38) descr="SP Vector Extension Enabled"
 }
 

@@ -1,6 +1,5 @@
 ##### REGISTERS #####
-:reg MSR
-.{
+:reg MSR subfields={
     VEC @(38) descr="AltiVec Enabled"
     DR @(59) descr="Data address translation (AltiVec rename)"
 }

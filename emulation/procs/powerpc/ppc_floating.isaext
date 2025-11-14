@@ -1,7 +1,7 @@
 ###### REGISTERS ######
 :reg FPR 32of64 name="fpr%d"
 :reg FPSCR 64 ctrl descr="Floating Point Status and Control Register"
-.{
+subfields={
     FX @(32)      descr="Exception summary"
     FEX +1        descr="Enabled exception summary"
     VX +1         descr="Invalid operation exception summary"
@@ -35,7 +35,7 @@
 }=0
 
 :reg MSR
-.{
+subfields={
     FP @(50) descr="Floating-point available"
     FE0 @(52) descr="Floating-point exception mode 0"
     FE1 @(55) descr="Floating-point exception mode 1"
@@ -43,7 +43,7 @@
 
 ###### FIELDS ########
 :fields size=32
-{
+subfields={
     frA @(11-15)
     frB @(16-20)
     frC @(21-25)

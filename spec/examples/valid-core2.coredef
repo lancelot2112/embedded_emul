@@ -6,5 +6,5 @@
 
 #Map the spaces to a system bus definition
 :bus sysbus addr=32 ranges={
-    0xC3F80000_0x10000->etpu
+    0xC3F80000+64kB -> etpu
 }

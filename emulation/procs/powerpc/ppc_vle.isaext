@@ -1,6 +1,5 @@
 #FIELDS
-:fields size=32
-{
+:fields size=32 subfields={
     BA @(11-15)
     BB @(16-20)
     BD15 @(16-30)
@@ -31,8 +30,7 @@
     UI21 @(21)
 }
 
-:fields size=16
-{
+:fields size=16 subfields={
     ARX @(12-15)
     ARY @(8-11)
     BD8 @(8-15)

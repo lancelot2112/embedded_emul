@@ -1,6 +1,5 @@
 ##### REGISTERS #####
-:reg MSR
-.{
+:reg MSR subfields={
    #Embedded.Hypervisor
     GS @(35) descr="Guest state"
    #Embedded.CacheLocking
