@@ -144,7 +144,7 @@ nanemu/
 │   ├── decode/          # Decoder generation
 │   ├── ir/              # Micro-IR (lower-level instruction representation)
 │   ├── exec/            # Interpreter engine
-│   ├── elf/             # ELF loader
+│   ├── loader/          # Executable(.elf,.exe)/Binary(.hex,.srec)/Overlay(.cdfx)/Config(.a2l) loader
 │   └── api/             # Unicorn-like API surface
 └── README.md
 ```
