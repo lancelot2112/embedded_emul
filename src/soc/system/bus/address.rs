@@ -7,9 +7,10 @@
 //! reference implementation while remaining borrowing-friendly for Rust.
 use std::sync::Arc;
 
+use crate::soc::device::{Device, DeviceResult};
+
 use super::{
     bus::DeviceBus,
-    device::Device,
     error::{BusError, BusResult},
     range::ResolvedRange,
 };
@@ -141,7 +142,7 @@ impl AddressHandle {
 
     pub(crate) fn transact<F, T>(&mut self, size: u64, op: F) -> BusResult<T>
     where
-        F: FnOnce(&dyn Device, u64) -> BusResult<T>,
+        F: FnOnce(&dyn Device, u64) -> DeviceResult<T>,
     {
         let active = self
             .active
@@ -154,7 +155,13 @@ impl AddressHandle {
             });
         }
         let device_offset = active.device_offset();
-        let result = op(&*active.resolved.device, device_offset)?;
+        let device_name = active.resolved.device.name().to_string();
+        let result = op(&*active.resolved.device, device_offset).map_err(|err| {
+            BusError::DeviceFault {
+                device: device_name,
+                source: Box::new(err),
+            }
+        })?;
         active.cursor += size;
         Ok(result)
     }
@@ -163,7 +170,8 @@ impl AddressHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::system::bus::{BasicMemory, Device, DeviceBus, Endianness};
+    use crate::soc::device::{BasicMemory, Device, Endianness};
+    use crate::soc::system::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_bus() -> Arc<DeviceBus> {
@@ -177,13 +185,28 @@ mod tests {
     fn jump_retreat_and_advance_track_cursor() {
         let bus = make_bus();
         let mut handle = AddressHandle::new(bus);
-        assert!(handle.jump(0x1000).is_ok());
-        assert_eq!(handle.bus_address(), Some(0x1000));
+        assert!(handle.jump(0x1000).is_ok(), "jump to base mapping should succeed");
+        assert_eq!(
+            handle.bus_address(),
+            Some(0x1000),
+            "cursor should align with the jump address"
+        );
         handle.advance(0x10).unwrap();
-        assert_eq!(handle.bus_address(), Some(0x1010));
+        assert_eq!(
+            handle.bus_address(),
+            Some(0x1010),
+            "advance should move cursor forward by requested bytes"
+        );
         handle.retreat(0x8).unwrap();
-        assert_eq!(handle.bus_address(), Some(0x1008));
-        assert!(handle.retreat(0x9).is_err());
+        assert_eq!(
+            handle.bus_address(),
+            Some(0x1008),
+            "retreat pulls cursor back within the range"
+        );
+        assert!(
+            handle.retreat(0x9).is_err(),
+            "retreat past mapping start should error"
+        );
     }
 
     #[test]
@@ -193,10 +216,17 @@ mod tests {
         handle.jump(0x1FFF).unwrap();
         // Confirm we can read up to the range end and that bytes_to_end reflects consumed distance.
         let initial = handle.bytes_to_end();
-        assert!(handle.available(0x10));
+        assert!(handle.available(0x10), "range reports availability before consuming bytes");
         handle.advance(0x10).unwrap();
-        assert_eq!(handle.bytes_to_end(), initial - 0x10);
-        assert!(!handle.available(initial + 1));
+        assert_eq!(
+            handle.bytes_to_end(),
+            initial - 0x10,
+            "bytes_to_end shrinks by the consumed amount"
+        );
+        assert!(
+            !handle.available(initial + 1),
+            "request larger than remaining bytes should fail"
+        );
     }
 
     #[test]
@@ -206,9 +236,19 @@ mod tests {
         handle.jump(0x1000).unwrap();
         handle.advance(0x20).unwrap();
         // Positive deltas move the cursor forward, but enormous negatives are rejected.
-        assert!(handle.jump_relative(0x10).is_ok());
-        assert_eq!(handle.bus_address(), Some(0x1010));
-        assert!(handle.jump_relative(-0x100).is_err());
+        assert!(
+            handle.jump_relative(0x10).is_ok(),
+            "relative forward jump within mapping should succeed"
+        );
+        assert_eq!(
+            handle.bus_address(),
+            Some(0x1010),
+            "cursor reflects the new relative address"
+        );
+        assert!(
+            handle.jump_relative(-0x100).is_err(),
+            "large negative jump should exceed bounds"
+        );
     }
 
     #[test]
@@ -226,10 +266,21 @@ mod tests {
                 device.read_u32(offset)
             })
             .unwrap();
-        assert_eq!(value, 0xAABB_CCDD);
-        assert_eq!(handle.bus_address(), Some(0x2004));
+        assert_eq!(
+            value, 0xAABB_CCDD,
+            "closure should observe the written 32-bit value"
+        );
+        assert_eq!(
+            handle.bus_address(),
+            Some(0x2004),
+            "cursor advances by the transact size"
+        );
 
         // Underlying memory sees the write at the expected device offset.
-        assert_eq!(memory.read_u32(0).unwrap(), 0xAABB_CCDD);
+        assert_eq!(
+            memory.read_u32(0).unwrap(),
+            0xAABB_CCDD,
+            "device offset zero stores the same pattern"
+        );
     }
 }
