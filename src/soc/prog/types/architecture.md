@@ -28,7 +28,7 @@ src/soc/progs/types/
 ├── aggregate.rs        # structs/classes/unions + members
 ├── sequence.rs         # arrays, slices, dynamic containers
 ├── pointer.rs          # pointer/ref/function-pointer types
-├── callable.rs         # subroutine signatures, pc ranges
+├── callable.rs         # subroutine signatures, return/parameter layouts
 ├── dynamic.rs          # runtime-shaped aggregates + expr VM
 ├── expr.rs             # stack-based evaluator (DWARF-style ops)
 ├── walker.rs           # TypeWalker/MemberCursor APIs
@@ -96,7 +96,7 @@ pub struct AggregateType {
 ### Pointers, references, callable types
 
 - `pointer.rs` supports data pointers, reference types, `restrict/volatile` qualifiers, and segmented addresses.
-- `callable.rs` models `GenSubroutine`: return list, parameter list, local variable table handles, PC range, calling convention.
+- `callable.rs` models `GenSubroutine`: return list, parameter list, local variable table handles, and calling convention metadata; symbol definitions carry any PC/addressing data.
 - Function pointers reuse the same `CallableId` inside a pointer record to avoid string concatenation each time.
 
 ### Dynamic & expression evaluation
@@ -179,6 +179,8 @@ This separation lets us swap DWARF/STABS readers without touching the hot path.
 - Bitfield composition reuse: `BitConstruct` can become a `BitLayout` helper shared by instruction decoders and struct bitfields.
 - Persisted caches: optional on-disk cache of `(structural hash -> TypeId)` to skip rebuilding types between runs.
 - Parallel builders: the arena can accept batches of `RawTypeDesc` once `TypeBuilder` is `Send` + uses sharded maps.
+
+Type metadata intentionally avoids embedding addresses, load points, or PC ranges. Those values belong to higher-level symbol definitions that reference `TypeId` handles, keeping this module focused purely on layout, size, and traversal semantics.
 
 ---
 
