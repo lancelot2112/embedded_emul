@@ -1,10 +1,15 @@
+//! DeviceBus owns the SoC memory map, handling device registration, hashed lookups,
+//! and redirect overlays so consumers get deterministic address-to-device resolution
+//! without mutating shared state. It mirrors the .NET BasicHashedDeviceBus logic while
+//! providing Rust-friendly error handling and concurrency semantics.
 use std::{
     collections::HashMap,
     sync::{atomic::{AtomicU64, Ordering}, Arc, RwLock},
 };
 
+use crate::soc::device::Device;
+
 use super::{
-    device::Device,
     error::{BusError, BusResult},
     range::{BusRange, RangeKind, ResolvedRange},
 };
@@ -253,5 +258,75 @@ impl DeviceBus {
     pub fn bytes_to_end(&self, address: u64) -> BusResult<u64> {
         let resolved = self.resolve(address)?;
         Ok(resolved.bus_end - address)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::soc::device::{BasicMemory, Endianness};
+
+    fn make_memory(name: &str, size: usize) -> Arc<BasicMemory> {
+        Arc::new(BasicMemory::new(name.to_string(), size, Endianness::Little))
+    }
+
+    #[test]
+    fn register_device_and_resolve_returns_expected_mapping() {
+        let bus = DeviceBus::new(10);
+        let ram = make_memory("ram", 0x2000);
+        bus.register_device(ram.clone(), 0x4000).expect("register ram");
+
+        let resolved = bus.resolve(0x5000).expect("resolve mapped address");
+        assert_eq!(
+            resolved.bus_start, 0x4000,
+            "resolved range should start at the device base address"
+        );
+        assert_eq!(
+            resolved.device_offset + (0x5000 - resolved.bus_start),
+            0x1000,
+            "device offset reflects distance from base"
+        );
+        assert_eq!(
+            resolved.device.name(),
+            "ram",
+            "resolve should return the same device that was registered"
+        );
+    }
+
+    #[test]
+    fn redirect_creates_alias_without_copying_data() {
+        let bus = DeviceBus::new(8);
+        let rom = make_memory("rom", 0x1000);
+        rom.write(0x40, &[0xAA, 0xBB, 0xCC, 0xDD]).expect("prefill rom");
+        bus.register_device(rom.clone(), 0).unwrap();
+
+        bus.redirect(0x2000, 4, 0x40).expect("create alias");
+        let resolved_alias = bus.resolve(0x2002).expect("resolve alias address");
+
+        let mut buf = [0u8; 2];
+        let alias_offset =
+            resolved_alias.device_offset + (0x2002 - resolved_alias.bus_start);
+        resolved_alias
+            .device
+            .read(alias_offset, &mut buf)
+            .expect("read redirected bytes");
+        assert_eq!(
+            buf,
+            [0xCC, 0xDD],
+            "redirect access returns bytes from the target region"
+        );
+    }
+
+    #[test]
+    fn bytes_to_end_tracks_remaining_range_length() {
+        let bus = DeviceBus::new(12);
+        let ram = make_memory("ram", 0x3000);
+        bus.register_device(ram, 0x1000).unwrap();
+        let remaining = bus.bytes_to_end(0x1ABC).expect("compute remaining");
+        assert_eq!(
+            remaining,
+            0x1000 + 0x3000 - 0x1ABC,
+            "bytes_to_end should subtract the queried address from range end"
+        );
     }
 }
