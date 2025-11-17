@@ -133,7 +133,6 @@ Extensions depend only on the `DataHandle` trait so they can be tested independe
 src/soc/system/bus/
 ├── architecture.md        # this document
 ├── mod.rs                 # re-exports & feature gates
-├── device.rs              # Device trait + BasicMemory
 ├── range.rs               # BusRange, redirect modeling
 ├── bus.rs                 # DeviceBus implementation
 ├── address.rs             # AddressHandle
