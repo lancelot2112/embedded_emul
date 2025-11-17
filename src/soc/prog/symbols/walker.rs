@@ -332,4 +332,26 @@ mod tests {
         let mut walker = SymbolWalker::new(&arena, agg_id);
         assert!(walker.next().is_none(), "empty aggregates have no leaves");
     }
+
+    #[test]
+    fn union_members_share_offsets() {
+        let mut arena = TypeArena::new();
+        let mut builder = TypeBuilder::new(&mut arena);
+        let as_u32 = builder.scalar(Some("as_u32"), 4, ScalarEncoding::Unsigned, DisplayFormat::Hex);
+        let as_float = builder.scalar(Some("as_f32"), 4, ScalarEncoding::Floating, DisplayFormat::Default);
+        let union_id = builder
+            .aggregate(AggregateKind::Union)
+            .layout(4, 0)
+            .member("as_u32", as_u32, 0)
+            .member("as_f32", as_float, 0)
+            .finish();
+        let mut walker = SymbolWalker::new(&arena, union_id);
+        let first = walker.next().expect("first union member");
+        let second = walker.next().expect("second union member");
+        assert_eq!(first.offset_bits, 0, "union elements should overlay at byte zero");
+        assert_eq!(second.offset_bits, 0, "all union elements overlay the same offset");
+        assert_eq!(first.path.to_string(&arena), "as_u32");
+        assert_eq!(second.path.to_string(&arena), "as_f32");
+        assert!(walker.next().is_none(), "union should only expose defined members");
+    }
 }

@@ -472,7 +472,7 @@ mod tests {
     use crate::soc::prog::types::arena::TypeArena;
     use crate::soc::prog::types::builder::TypeBuilder;
     use crate::soc::prog::types::record::TypeRecord;
-    use crate::soc::prog::types::scalar::{DisplayFormat, EnumVariant};
+    use crate::soc::prog::types::scalar::{BitFieldType, DisplayFormat, EnumVariant};
 
     fn make_bus(size: usize) -> (Arc<DeviceBus>, Arc<BasicMemory>) {
         let bus = Arc::new(DeviceBus::new(8));
@@ -638,5 +638,112 @@ mod tests {
             vec!["data[0]", "data[1]", "data[2]"],
             "walker should visit array elements in order"
         );
+    }
+
+    #[test]
+    fn mixed_data_and_bitfield_values() {
+        let mut arena = TypeArena::new();
+        let (header_id, container_id, tail_id) = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            let header = builder.scalar(Some("header"), 1, ScalarEncoding::Unsigned, DisplayFormat::Hex);
+            let container = builder.scalar(None, 2, ScalarEncoding::Unsigned, DisplayFormat::Hex);
+            let tail = builder.scalar(Some("tail"), 2, ScalarEncoding::Signed, DisplayFormat::Decimal);
+            (header, container, tail)
+        };
+        let bitfield_id = {
+            let bitfield = BitFieldType::new(container_id, 0, 12);
+            arena.push_record(TypeRecord::BitField(bitfield))
+        };
+        let agg_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            builder
+                .aggregate(AggregateKind::Struct)
+                .layout(5, 0)
+                .member("header", header_id, 0)
+                .member("flags", bitfield_id, 1)
+                .member("tail", tail_id, 3)
+                .finish()
+        };
+        let arena = Arc::new(arena);
+        let mut table = SymbolTable::new(Arc::clone(&arena));
+        let handle = table
+            .builder()
+            .label("MIXED")
+            .type_id(agg_id)
+            .runtime_addr(0x30)
+            .size(5)
+            .finish();
+
+        let (bus, memory) = make_bus(0x80);
+        let payload = [0xAA, 0xBC, 0x0A, 0x34, 0x12];
+        memory.write(0x30, &payload).unwrap();
+
+        let mut symbol_handle = SymbolHandle::new(&table, bus);
+        let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
+
+        let first = cursor.next().expect("header step").expect("value");
+        assert_eq!(first.entry.path.to_string(arena.as_ref()), "header");
+        assert_eq!(first.value, SymbolValue::Unsigned(0xAA), "scalar should decode directly");
+
+        let second = cursor.next().expect("flags step").expect("value");
+        assert_eq!(second.entry.path.to_string(arena.as_ref()), "flags");
+        assert_eq!(second.value, SymbolValue::Unsigned(0x0ABC), "bitfield bytes should round-trip");
+
+        let third = cursor.next().expect("tail step").expect("value");
+        assert_eq!(third.entry.path.to_string(arena.as_ref()), "tail");
+        assert_eq!(third.value, SymbolValue::Signed(0x1234), "signed field should decode respecting endianness");
+
+        assert!(cursor.next().unwrap().is_none(), "cursor should exhaust after three members");
+    }
+
+    #[test]
+    fn union_members_overlay_same_bytes() {
+        let mut arena = TypeArena::new();
+        let union_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            let as_u32 = builder.scalar(Some("as_u32"), 4, ScalarEncoding::Unsigned, DisplayFormat::Hex);
+            let as_f32 = builder.scalar(Some("as_f32"), 4, ScalarEncoding::Floating, DisplayFormat::Default);
+            builder
+                .aggregate(AggregateKind::Union)
+                .layout(4, 0)
+                .member("as_u32", as_u32, 0)
+                .member("as_f32", as_f32, 0)
+                .finish()
+        };
+        let container_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            builder
+                .aggregate(AggregateKind::Struct)
+                .layout(4, 0)
+                .member("payload", union_id, 0)
+                .finish()
+        };
+        let arena = Arc::new(arena);
+        let mut table = SymbolTable::new(Arc::clone(&arena));
+        let handle = table
+            .builder()
+            .label("UNION")
+            .type_id(container_id)
+            .runtime_addr(0x50)
+            .size(4)
+            .finish();
+
+        let (bus, memory) = make_bus(0x80);
+        let overlay = f32::to_le_bytes(1.0);
+        memory.write(0x50, &overlay).unwrap();
+
+        let mut symbol_handle = SymbolHandle::new(&table, bus);
+        let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
+
+        let first = cursor.next().expect("as_u32 step").expect("value");
+        assert_eq!(first.entry.path.to_string(arena.as_ref()), "payload.as_u32");
+        assert_eq!(first.value, SymbolValue::Unsigned(0x3F80_0000), "raw bytes should decode as u32");
+
+        let second = cursor.next().expect("as_f32 step").expect("value");
+        assert_eq!(second.entry.path.to_string(arena.as_ref()), "payload.as_f32");
+        assert_eq!(second.value, SymbolValue::Float(1.0), "same bytes should reinterpret as float");
+        assert_eq!(first.address, second.address, "union members must reference the same address");
+
+        assert!(cursor.next().unwrap().is_none(), "union member list should be exhausted");
     }
 }
