@@ -14,6 +14,7 @@ The parser is structured as a set of focused modules that cooperate through the 
   - Includes its own tests that exercise success/error cases so regressions stay localized.
 - `space_context.rs`
   - Handles `:<space_tag>` contexts for non-logic spaces, parsing register forms, attribute lists, and nested `subfields={}` blocks.
+  - Enforces redirect-only fields (no `offset`/`size`/`reset` when `redirect=` is present) so register definitions stay within the spec without waiting for a later validation pass.
   - Reuses the shared `Parser` helpers plus numeric literal routines to keep directive-specific logic focused on structure rather than token management.
 - `parameters.rs`
   - Shared routines for decoding directive payloads into `ParameterDecl` values.

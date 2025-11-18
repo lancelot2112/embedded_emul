@@ -53,10 +53,12 @@ fn parse_register_form(parser: &mut Parser, space: &str) -> Result<IsaItem, IsaE
         parser.expect(TokenKind::Equals, "'=' after field attribute name")?;
         match attr_name.to_ascii_lowercase().as_str() {
             "offset" => {
+                ensure_redirect_compatible("offset", redirect.is_some())?;
                 ensure_unique(attr_name.as_str(), &offset)?;
                 offset = Some(parse_number(parser, "offset")?);
             }
             "size" => {
+                ensure_redirect_compatible("size", redirect.is_some())?;
                 ensure_unique(attr_name.as_str(), &size)?;
                 let value = parse_number(parser, "size")?;
                 if value == 0 || value > 512 {
@@ -67,6 +69,7 @@ fn parse_register_form(parser: &mut Parser, space: &str) -> Result<IsaItem, IsaE
                 size = Some(value as u32);
             }
             "reset" => {
+                ensure_redirect_compatible("reset", redirect.is_some())?;
                 ensure_unique(attr_name.as_str(), &reset)?;
                 reset = Some(parse_number(parser, "reset" )?);
             }
@@ -77,6 +80,21 @@ fn parse_register_form(parser: &mut Parser, space: &str) -> Result<IsaItem, IsaE
             }
             "redirect" => {
                 ensure_unique(attr_name.as_str(), &redirect)?;
+                if offset.is_some() {
+                    return Err(IsaError::Parser(
+                        "redirect fields cannot specify an offset".into(),
+                    ));
+                }
+                if size.is_some() {
+                    return Err(IsaError::Parser(
+                        "redirect fields cannot specify a size".into(),
+                    ));
+                }
+                if reset.is_some() {
+                    return Err(IsaError::Parser(
+                        "redirect fields cannot specify a reset value".into(),
+                    ));
+                }
                 redirect = Some(parse_context_reference(parser)?);
             }
             "subfields" => {
@@ -117,6 +135,16 @@ fn ensure_unique<T>(name: &str, slot: &Option<T>) -> Result<(), IsaError> {
     if slot.is_some() {
         Err(IsaError::Parser(format!(
             "field attribute '{name}' specified multiple times"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn ensure_redirect_compatible(name: &str, has_redirect: bool) -> Result<(), IsaError> {
+    if has_redirect {
+        Err(IsaError::Parser(format!(
+            "redirect fields cannot specify a {name} attribute"
         )))
     } else {
         Ok(())
@@ -323,5 +351,43 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, IsaError::Parser(msg) if msg.contains("duplicate subfields")));
+    }
+
+    #[test]
+    fn parses_redirect_field_without_extra_attributes() {
+        let doc = parse(
+            ":space reg addr=32 word=64 type=register\n:reg SP redirect=GPR1 descr=\"Stack Pointer\"",
+        );
+        let field = match &doc.items[1] {
+            IsaItem::SpaceMember(member) => match &member.member {
+                SpaceMember::Field(field) => field,
+                other => panic!("unexpected member: {other:?}"),
+            },
+            other => panic!("unexpected item: {other:?}"),
+        };
+        assert!(field.redirect.is_some());
+        assert!(field.offset.is_none());
+        assert!(field.size.is_none());
+        assert!(field.reset.is_none());
+    }
+
+    #[test]
+    fn rejects_redirect_with_offset() {
+        let err = parse_str(
+            PathBuf::from("test.isa"),
+            ":space reg addr=32 word=64 type=register\n:reg SP offset=0x0 redirect=GPR1",
+        )
+        .unwrap_err();
+        assert!(matches!(err, IsaError::Parser(msg) if msg.contains("cannot specify an offset")));
+    }
+
+    #[test]
+    fn rejects_redirect_followed_by_size() {
+        let err = parse_str(
+            PathBuf::from("test.isa"),
+            ":space reg addr=32 word=64 type=register\n:reg SP redirect=GPR1 size=64",
+        )
+        .unwrap_err();
+        assert!(matches!(err, IsaError::Parser(msg) if msg.contains("cannot specify a size")));
     }
 }
