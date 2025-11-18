@@ -57,12 +57,11 @@ pub(super) fn parse_space_directive(parser: &mut Parser) -> Result<IsaItem, IsaE
         return Err(IsaError::Parser(":space requires a word attribute".into()));
     }
 
-    parser.register_space(&name);
+    parser.register_space(&name, kind.clone());
     Ok(IsaItem::Space(SpaceDecl {
         name,
         kind,
         attributes,
-        members: Vec::new(),
     }))
 }
 
@@ -176,15 +175,12 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_space_contexts_even_if_unimplemented() {
-        let err = parse_str(
-            PathBuf::from("test.isa"),
-            ":space reg addr=32 word=64 type=register\n:reg GPR size=64",
-        )
-        .unwrap_err();
-        match err {
-            IsaError::Parser(msg) => assert!(msg.contains("space context"), "{msg}"),
-            other => panic!("unexpected error: {other:?}"),
-        }
+    fn registers_space_names_for_followup_contexts() {
+        let doc = parse(
+            ":space reg addr=32 word=64 type=register\n:reg GPR size=64 subfields={\n    VALUE @(0..63)\n}",
+        );
+        assert_eq!(doc.items.len(), 2, "space definition plus field member");
+        assert!(matches!(doc.items[0], IsaItem::Space(_)));
+        assert!(matches!(doc.items[1], IsaItem::SpaceMember(_)));
     }
 }

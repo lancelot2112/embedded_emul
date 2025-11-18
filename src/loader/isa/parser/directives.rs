@@ -1,7 +1,13 @@
 use crate::soc::isa::ast::IsaItem;
 use crate::soc::isa::error::IsaError;
 
-use super::{parameters::parse_parameter_decl, space::parse_space_directive, Parser, TokenKind};
+use super::{
+    parameters::parse_parameter_decl,
+    space::parse_space_directive,
+    space_context::parse_space_context_directive,
+    Parser,
+    TokenKind,
+};
 
 impl<'src> Parser<'src> {
     pub(super) fn parse_directive(&mut self) -> Result<IsaItem, IsaError> {
@@ -34,9 +40,10 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_space_context(&mut self, name: &str) -> Result<IsaItem, IsaError> {
-        Err(IsaError::Parser(format!(
-            "space context :{name} is not supported yet"
-        )))
+        let kind = self.space_kind(name).ok_or_else(|| {
+            IsaError::Parser(format!("space :{name} context referenced before definition"))
+        })?;
+        parse_space_context_directive(self, name, kind)
     }
 
     fn ensure_directive_boundary(&mut self, directive: &str) -> Result<(), IsaError> {
@@ -148,15 +155,17 @@ mod tests {
     }
 
     #[test]
-    fn recognizes_space_contexts_even_if_unimplemented() {
-        let err = parse_str(
-            PathBuf::from("test.isa"),
-            ":space reg addr=32 word=64 type=register\n:reg GPR size=64",
-        )
-        .unwrap_err();
-        match err {
-            IsaError::Parser(msg) => assert!(msg.contains("space context"), "{msg}"),
-            other => panic!("unexpected error: {other:?}"),
+    fn parses_basic_space_context() {
+        let doc = parse(
+            ":space reg addr=32 word=64 type=register\n:reg GPR size=64 subfields={\n    VALUE @(0..63)\n}",
+        );
+        assert_eq!(doc.items.len(), 2, "space + member item expected");
+        assert!(matches!(doc.items[0], IsaItem::Space(_)));
+        match &doc.items[1] {
+            IsaItem::SpaceMember(member) => {
+                assert_eq!(member.space, "reg");
+            }
+            other => panic!("unexpected item: {other:?}"),
         }
     }
 

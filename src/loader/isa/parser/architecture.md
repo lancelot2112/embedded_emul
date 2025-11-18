@@ -12,6 +12,9 @@ The parser is structured as a set of focused modules that cooperate through the 
 - `space.rs`
   - Contains the full `:space` parser, including attribute validation, numeric literal decoding, and space tag registration.
   - Includes its own tests that exercise success/error cases so regressions stay localized.
+- `space_context.rs`
+  - Handles `:<space_tag>` contexts for non-logic spaces, parsing register forms, attribute lists, and nested `subfields={}` blocks.
+  - Reuses the shared `Parser` helpers plus numeric literal routines to keep directive-specific logic focused on structure rather than token management.
 - `parameters.rs`
   - Shared routines for decoding directive payloads into `ParameterDecl` values.
   - Leans on helper methods from `Parser` for token management and `parse_numeric_literal` when numbers are encountered.

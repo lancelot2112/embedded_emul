@@ -5,6 +5,7 @@ mod directives;
 mod literals;
 mod parameters;
 mod space;
+mod space_context;
 
 pub use document::{parse_str, Parser};
 

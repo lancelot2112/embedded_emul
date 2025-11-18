@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::soc::isa::ast::IsaDocument;
+use crate::soc::isa::ast::{IsaDocument, SpaceKind};
 use crate::soc::isa::error::IsaError;
 
 use super::{Lexer, Token, TokenKind};
@@ -9,7 +9,7 @@ use super::{Lexer, Token, TokenKind};
 pub struct Parser<'src> {
     lexer: Lexer<'src>,
     peeked: Option<Token>,
-    known_spaces: HashSet<String>,
+    known_spaces: HashMap<String, SpaceKind>,
 }
 
 impl<'src> Parser<'src> {
@@ -17,7 +17,7 @@ impl<'src> Parser<'src> {
         Self {
             lexer: Lexer::new(source),
             peeked: None,
-            known_spaces: HashSet::new(),
+            known_spaces: HashMap::new(),
         }
     }
 
@@ -51,7 +51,7 @@ impl<'src> Parser<'src> {
         Ok(self.peek()?.kind == kind)
     }
 
-    fn peek(&mut self) -> Result<&Token, IsaError> {
+    pub(super) fn peek(&mut self) -> Result<&Token, IsaError> {
         if self.peeked.is_none() {
             self.peeked = Some(self.lexer.next_token()?);
         }
@@ -67,12 +67,16 @@ impl<'src> Parser<'src> {
 }
 
 impl<'src> Parser<'src> {
-    pub(super) fn register_space(&mut self, name: &str) {
-        self.known_spaces.insert(name.to_string());
+    pub(super) fn register_space(&mut self, name: &str, kind: SpaceKind) {
+        self.known_spaces.insert(name.to_string(), kind);
     }
 
     pub(super) fn is_known_space(&self, name: &str) -> bool {
-        self.known_spaces.contains(name)
+        self.known_spaces.contains_key(name)
+    }
+
+    pub(super) fn space_kind(&self, name: &str) -> Option<SpaceKind> {
+        self.known_spaces.get(name).cloned()
     }
 }
 

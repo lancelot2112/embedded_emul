@@ -25,6 +25,7 @@ impl IsaDocument {
 pub enum IsaItem {
     Parameter(ParameterDecl),
     Space(SpaceDecl),
+    SpaceMember(SpaceMemberDecl),
     Instruction(InstructionDecl),
     Include(IncludeDecl),
 }
@@ -46,7 +47,12 @@ pub struct SpaceDecl {
     pub name: String,
     pub kind: SpaceKind,
     pub attributes: Vec<SpaceAttribute>,
-    pub members: Vec<SpaceMember>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SpaceMemberDecl {
+    pub space: String,
+    pub member: SpaceMember,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,8 +80,40 @@ pub enum SpaceMember {
 
 #[derive(Debug, Clone)]
 pub struct FieldDecl {
+    pub space: String,
     pub name: String,
-    pub bitfield: BitFieldSpec,
+    pub range: Option<FieldIndexRange>,
+    pub offset: Option<u64>,
+    pub size: Option<u32>,
+    pub reset: Option<u64>,
+    pub description: Option<String>,
+    pub redirect: Option<ContextReference>,
+    pub subfields: Vec<SubFieldDecl>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldIndexRange {
+    pub start: u32,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ContextReference {
+    pub segments: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubFieldDecl {
+    pub name: String,
+    pub bit_spec: String,
+    pub operations: Vec<SubFieldOp>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubFieldOp {
+    pub kind: String,
+    pub subtype: Option<String>,
 }
 
 #[derive(Debug, Clone)]
