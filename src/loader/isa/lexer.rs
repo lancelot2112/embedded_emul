@@ -1,6 +1,6 @@
 //! Streaming tokenizer for `.isa`-family source files.
 
-use super::error::IsaError;
+use crate::soc::isa::error::IsaError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {

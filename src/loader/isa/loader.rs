@@ -4,11 +4,11 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::ast::{IncludeDecl, IsaDocument, IsaItem};
-use super::error::IsaError;
-use super::machine::MachineDescription;
-use super::parser::parse_str;
-use super::validator::Validator;
+use crate::loader::isa::parse_str;
+use crate::soc::isa::ast::{IncludeDecl, IsaDocument, IsaItem};
+use crate::soc::isa::error::IsaError;
+use crate::soc::isa::machine::MachineDescription;
+use crate::soc::isa::validator::Validator;
 
 pub struct IsaLoader {
     visited: BTreeSet<PathBuf>,

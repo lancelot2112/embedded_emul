@@ -7,13 +7,9 @@
 pub mod ast;
 pub mod error;
 pub mod handle;
-pub mod lexer;
-pub mod loader;
 pub mod machine;
-pub mod parser;
 pub mod semantics;
 pub mod validator;
 
-pub use error::IsaError;
 pub use handle::IsaHandle;
 pub use machine::{Disassembly, MachineDescription};

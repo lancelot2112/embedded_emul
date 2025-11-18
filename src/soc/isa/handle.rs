@@ -5,7 +5,7 @@ use std::path::Path;
 use crate::soc::system::bus::DataHandle;
 
 use super::error::IsaError;
-use super::loader::IsaLoader;
+use crate::loader::isa::IsaLoader;
 use super::machine::{Disassembly, MachineDescription};
 use super::semantics::SemanticBlock;
 

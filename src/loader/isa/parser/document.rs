@@ -1,10 +1,9 @@
-//! Recursive descent parser that turns lexer tokens into [`IsaDocument`](crate::soc::isa::ast::IsaDocument).
-
 use std::path::PathBuf;
 
-use super::ast::IsaDocument;
-use super::error::IsaError;
-use super::lexer::{Lexer, Token, TokenKind};
+use crate::soc::isa::ast::IsaDocument;
+use crate::soc::isa::error::IsaError;
+
+use super::{Lexer, Token, TokenKind};
 
 pub struct Parser<'src> {
     lexer: Lexer<'src>,
@@ -20,12 +19,33 @@ impl<'src> Parser<'src> {
     }
 
     pub fn parse_document(&mut self, path: PathBuf) -> Result<IsaDocument, IsaError> {
-        let items = Vec::new();
-        while self.peek()?.kind != TokenKind::EOF {
-            // Placeholder: once the grammar is implemented each directive will be parsed here.
-            self.consume()?;
+        let mut items = Vec::new();
+        while !self.check(TokenKind::EOF)? {
+            items.push(self.parse_directive()?);
         }
         Ok(IsaDocument::new(path, items))
+    }
+
+    pub(super) fn expect_identifier(&mut self, context: &str) -> Result<String, IsaError> {
+        let token = self.consume()?;
+        if token.kind == TokenKind::Identifier {
+            Ok(token.lexeme)
+        } else {
+            Err(IsaError::Parser(format!("expected identifier for {context}")))
+        }
+    }
+
+    pub(super) fn expect(&mut self, kind: TokenKind, context: &str) -> Result<Token, IsaError> {
+        let token = self.consume()?;
+        if token.kind == kind {
+            Ok(token)
+        } else {
+            Err(IsaError::Parser(format!("expected {context}")))
+        }
+    }
+
+    fn check(&mut self, kind: TokenKind) -> Result<bool, IsaError> {
+        Ok(self.peek()?.kind == kind)
     }
 
     fn peek(&mut self) -> Result<&Token, IsaError> {
@@ -35,7 +55,7 @@ impl<'src> Parser<'src> {
         Ok(self.peeked.as_ref().expect("peeked token must exist"))
     }
 
-    fn consume(&mut self) -> Result<Token, IsaError> {
+    pub(super) fn consume(&mut self) -> Result<Token, IsaError> {
         if let Some(token) = self.peeked.take() {
             return Ok(token);
         }
