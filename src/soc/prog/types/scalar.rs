@@ -2,7 +2,7 @@
 
 use smallvec::SmallVec;
 
-use super::arena::{StringId, TypeId};
+use super::arena::StringId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarEncoding {
@@ -111,23 +111,6 @@ impl FixedScalar {
 
     pub fn apply(&self, raw: i64) -> f64 {
         (raw as f64) * self.scale + self.offset
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BitFieldType {
-    pub container: TypeId,
-    pub offset_bits: u16,
-    pub width_bits: u16,
-}
-
-impl BitFieldType {
-    pub fn new(container: TypeId, offset_bits: u16, width_bits: u16) -> Self {
-        Self {
-            container,
-            offset_bits,
-            width_bits,
-        }
     }
 }
 

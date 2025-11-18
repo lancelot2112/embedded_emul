@@ -3,6 +3,7 @@
 pub mod arena;
 pub mod record;
 pub mod scalar;
+pub mod bitfield;
 pub mod aggregate;
 pub mod sequence;
 pub mod pointer;
@@ -21,6 +22,7 @@ pub use dynamic::{DynamicAggregate, DynamicField};
 pub use expr::{EvalContext, ExprProgram, OpCode};
 pub use pointer::{PointerKind, PointerQualifiers, PointerType};
 pub use record::{LayoutSize, MemberRecord, MemberSpan, OpaqueType, TypeRecord};
-pub use scalar::{BitFieldType, DisplayFormat, EnumType, ScalarEncoding, ScalarType};
+pub use scalar::{DisplayFormat, EnumType, ScalarEncoding, ScalarType};
+pub use bitfield::{BitFieldSegment, BitFieldSpec, BitFieldSpecBuilder, PadKind, PadSpec};
 pub use sequence::{CountSource, SequenceCount, SequenceType};
 pub use walker::{MemberCursor, ResolvedMember, TypeWalker};

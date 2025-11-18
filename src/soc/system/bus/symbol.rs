@@ -8,6 +8,7 @@ use crate::soc::prog::symbols::{
     SymbolHandle as TableSymbolHandle, SymbolId, SymbolRecord, SymbolTable,
 };
 use crate::soc::prog::types::arena::{TypeArena, TypeId};
+use crate::soc::prog::types::bitfield::{BitFieldSegment, BitFieldSpec, PadKind};
 use crate::soc::prog::types::scalar::{EnumType, FixedScalar, ScalarEncoding, ScalarType};
 use crate::soc::prog::types::sequence::{SequenceCount, SequenceType};
 use crate::soc::system::bus::ext::{
@@ -222,9 +223,33 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
     pub fn next(&mut self) -> Result<Option<SymbolWalkRead>, SymbolAccessError> {
         while let Some(entry) = self.walker.next() {
             if entry.offset_bits % 8 != 0 {
-                continue;
+                let is_bitfield = matches!(
+                    self.arena.get(entry.ty),
+                    crate::soc::prog::types::record::TypeRecord::BitField(_)
+                );
+                if !is_bitfield {
+                    continue;
+                }
             }
-            let address = self.snapshot.address + (entry.offset_bits / 8) as u64;
+            let mut address = self.snapshot.address + (entry.offset_bits / 8) as u64;
+            if let crate::soc::prog::types::record::TypeRecord::BitField(bitfield) =
+                self.arena.get(entry.ty)
+            {
+                if let Some(segment_offset) = bitfield
+                    .segments
+                    .iter()
+                    .filter_map(|segment| match segment {
+                        BitFieldSegment::Range { offset, width } if *width > 0 => {
+                            Some(*offset as u64)
+                        }
+                        _ => None,
+                    })
+                    .min()
+                {
+                    let total_bits = entry.offset_bits + segment_offset;
+                    address = self.snapshot.address + (total_bits / 8) as u64;
+                }
+            }
             let value = self.read_entry_value(&entry, address)?;
             return Ok(Some(SymbolWalkRead { entry, value, address }));
         }
@@ -290,63 +315,189 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
         entry: &SymbolWalkEntry,
         address: u64,
     ) -> Result<SymbolValue, SymbolAccessError> {
-        self.handle.data.address_mut().jump(address)?;
         let value = match entry.kind {
             ValueKind::Unsigned { bytes } => {
-                let val = self.handle.data.read_unsigned(bytes as usize)?;
-                SymbolValue::Unsigned(val)
+                if let crate::soc::prog::types::record::TypeRecord::BitField(bitfield) =
+                    self.arena.get(entry.ty)
+                {
+                    self.read_bitfield(entry, bitfield)?
+                } else {
+                    self.handle.data.address_mut().jump(address)?;
+                    let val = self.handle.data.read_unsigned(bytes as usize)?;
+                    SymbolValue::Unsigned(val)
+                }
             }
             ValueKind::Signed { bytes } => {
+                self.handle.data.address_mut().jump(address)?;
                 let val = self.handle.data.read_signed(bytes as usize)?;
                 SymbolValue::Signed(val)
             }
             ValueKind::Float32 => {
+                self.handle.data.address_mut().jump(address)?;
                 let val = self.handle.data.read_f32()?;
                 SymbolValue::Float(val as f64)
             }
             ValueKind::Float64 => {
+                self.handle.data.address_mut().jump(address)?;
                 let val = self.handle.data.read_f64()?;
                 SymbolValue::Float(val)
             }
             ValueKind::Utf8 { bytes } => {
+                self.handle.data.address_mut().jump(address)?;
                 let text = self.handle.data.read_utf8(bytes as usize)?;
                 SymbolValue::Utf8(text)
             }
             ValueKind::Enum => {
+                self.handle.data.address_mut().jump(address)?;
                 let record = self.arena.get(entry.ty);
                 if let crate::soc::prog::types::record::TypeRecord::Enum(enum_type) = record {
                     interpret_enum(&mut self.handle.data, self.arena, enum_type)?
                 } else {
                     return Err(SymbolAccessError::UnsupportedTraversal {
-                        label: self
-                            .handle
-                            .table
-                            .resolve_label(self.snapshot.record.label)
-                            .to_string(),
+                        label: self.symbol_label(),
                     });
                 }
             }
             ValueKind::Fixed => {
+                self.handle.data.address_mut().jump(address)?;
                 let record = self.arena.get(entry.ty);
                 if let crate::soc::prog::types::record::TypeRecord::Fixed(fixed) = record {
                     interpret_fixed(&mut self.handle.data, fixed)?
                         .unwrap_or(SymbolValue::Signed(0))
                 } else {
                     return Err(SymbolAccessError::UnsupportedTraversal {
-                        label: self
-                            .handle
-                            .table
-                            .resolve_label(self.snapshot.record.label)
-                            .to_string(),
+                        label: self.symbol_label(),
                     });
                 }
             }
             ValueKind::Pointer { bytes, .. } => {
+                self.handle.data.address_mut().jump(address)?;
                 let val = self.handle.data.read_unsigned(bytes as usize)?;
                 SymbolValue::Unsigned(val)
             }
         };
         Ok(value)
+    }
+
+    fn read_bitfield(
+        &mut self,
+        entry: &SymbolWalkEntry,
+        spec: &BitFieldSpec,
+    ) -> Result<SymbolValue, SymbolAccessError> {
+        let width = spec.total_width() as u32;
+        if width == 0 {
+            return Ok(SymbolValue::Unsigned(0));
+        }
+        if width > 64 {
+            return Err(SymbolAccessError::UnsupportedTraversal {
+                label: self.symbol_label(),
+            });
+        }
+
+        let mut aligned_bit_base = 0u64;
+        let mut backing = 0u128;
+        let mut has_range = false;
+        let mut min_bit = u64::MAX;
+        let mut max_bit = 0u64;
+        for segment in &spec.segments {
+            if let BitFieldSegment::Range { offset, width } = segment {
+                if *width == 0 {
+                    continue;
+                }
+                has_range = true;
+                let start = entry.offset_bits + (*offset as u64);
+                let end = start + (*width as u64);
+                min_bit = min_bit.min(start);
+                max_bit = max_bit.max(end);
+            }
+        }
+        if has_range {
+            let aligned_address_bit = min_bit & !7;
+            let byte_address = self.snapshot.address + (aligned_address_bit / 8);
+            let bit_span = max_bit.saturating_sub(aligned_address_bit);
+            let byte_span = ((bit_span + 7) / 8) as usize;
+            let mut buf = vec![0u8; byte_span];
+            self.handle.data.address_mut().jump(byte_address)?;
+            if !buf.is_empty() {
+                self.handle.data.read_bytes(&mut buf)?;
+            }
+            for (idx, byte) in buf.iter().enumerate() {
+                backing |= (*byte as u128) << (idx * 8);
+            }
+            aligned_bit_base = aligned_address_bit;
+        }
+
+        let mut acc: u128 = 0;
+        let mut acc_width: u32 = 0;
+        for segment in &spec.segments {
+            match segment {
+                BitFieldSegment::Range { offset, width } => {
+                    if *width == 0 {
+                        continue;
+                    }
+                    let abs_start = entry.offset_bits + (*offset as u64);
+                    let shift = abs_start
+                        .checked_sub(aligned_bit_base)
+                        .unwrap_or(0) as u32;
+                    let mask = if *width as u32 == 64 {
+                        u128::MAX
+                    } else {
+                        (1u128 << (*width as u32)) - 1
+                    };
+                    let raw = (backing >> shift) & mask;
+                    acc |= raw << acc_width;
+                    acc_width += *width as u32;
+                }
+                BitFieldSegment::Literal { value, width } => {
+                    if *width == 0 {
+                        continue;
+                    }
+                    let width_u32 = *width as u32;
+                    let mask = if width_u32 == 64 {
+                        u64::MAX
+                    } else {
+                        (1u64 << width_u32) - 1
+                    };
+                    let raw = (*value) & mask;
+                    acc |= (raw as u128) << acc_width;
+                    acc_width += width_u32;
+                }
+            }
+        }
+
+        let mut result_width = acc_width;
+        if let Some(pad) = spec.pad {
+            let pad_width = pad.width as u32;
+            if pad_width > 0 {
+                if matches!(pad.kind, PadKind::Sign)
+                    && acc_width > 0
+                {
+                    let sign_bit = ((acc >> (acc_width - 1)) & 1) != 0;
+                    if sign_bit {
+                        let mask = ((1u128 << pad_width) - 1) << acc_width;
+                        acc |= mask;
+                    }
+                }
+                result_width += pad_width;
+            }
+        }
+        let total_width = result_width;
+        debug_assert_eq!(u32::from(spec.total_width()), total_width);
+        let value_u64 = acc as u64;
+        if spec.is_signed() {
+            let shift = 64 - total_width;
+            let signed = ((value_u64 << shift) as i64) >> shift;
+            Ok(SymbolValue::Signed(signed))
+        } else {
+            Ok(SymbolValue::Unsigned(value_u64))
+        }
+    }
+
+    fn symbol_label(&self) -> String {
+        self.handle
+            .table
+            .resolve_label(self.snapshot.record.label)
+            .to_string()
     }
 }
 
@@ -469,10 +620,11 @@ mod tests {
     use crate::soc::device::{BasicMemory, Device, Endianness as DeviceEndianness};
     use crate::soc::prog::symbols::symbol::SymbolState;
     use crate::soc::prog::types::aggregate::AggregateKind;
-    use crate::soc::prog::types::arena::TypeArena;
+    use crate::soc::prog::types::arena::{TypeArena, TypeId};
+    use crate::soc::prog::types::bitfield::{BitFieldSpec, PadKind, PadSpec};
     use crate::soc::prog::types::builder::TypeBuilder;
     use crate::soc::prog::types::record::TypeRecord;
-    use crate::soc::prog::types::scalar::{BitFieldType, DisplayFormat, EnumVariant};
+    use crate::soc::prog::types::scalar::{DisplayFormat, EnumVariant};
 
     fn make_bus(size: usize) -> (Arc<DeviceBus>, Arc<BasicMemory>) {
         let bus = Arc::new(DeviceBus::new(8));
@@ -651,7 +803,7 @@ mod tests {
             (header, container, tail)
         };
         let bitfield_id = {
-            let bitfield = BitFieldType::new(container_id, 0, 12);
+            let bitfield = BitFieldSpec::from_range(container_id, 0, 12);
             arena.push_record(TypeRecord::BitField(bitfield))
         };
         let agg_id = {
@@ -694,6 +846,113 @@ mod tests {
         assert_eq!(third.value, SymbolValue::Signed(0x1234), "signed field should decode respecting endianness");
 
         assert!(cursor.next().unwrap().is_none(), "cursor should exhaust after three members");
+    }
+
+    #[test]
+    fn bitfield_members_read_individually() {
+        let mut arena = TypeArena::new();
+        let backing_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            builder.scalar(Some("register"), 2, ScalarEncoding::Unsigned, DisplayFormat::Hex)
+        };
+        let specs: [(&str, u16); 5] = [
+            ("a", 0),
+            ("b", 3),
+            ("c", 6),
+            ("d", 9),
+            ("e", 12),
+        ];
+        let bitfield_ids: Vec<TypeId> = specs
+            .iter()
+            .map(|(_, offset)| {
+                let bitfield = BitFieldSpec::from_range(backing_id, *offset, 3);
+                arena.push_record(TypeRecord::BitField(bitfield))
+            })
+            .collect();
+        let agg_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            let mut agg = builder.aggregate(AggregateKind::Struct).layout(2, 1);
+            for ((name, _), field_id) in specs.iter().zip(bitfield_ids.iter()) {
+                agg = agg.member(*name, *field_id, 0);
+            }
+            agg.finish()
+        };
+        let arena = Arc::new(arena);
+        let mut table = SymbolTable::new(Arc::clone(&arena));
+        let handle = table
+            .builder()
+            .label("BITS")
+            .type_id(agg_id)
+            .runtime_addr(0x60)
+            .size(2)
+            .finish();
+
+        let (bus, memory) = make_bus(0x80);
+        let packed = (1 & 0x7)
+            | ((2 & 0x7) << 3)
+            | ((3 & 0x7) << 6)
+            | ((4 & 0x7) << 9)
+            | ((5 & 0x7) << 12);
+        memory.write(0x60, &u16::to_le_bytes(packed)).unwrap();
+
+        let mut symbol_handle = SymbolHandle::new(&table, bus);
+        let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
+        let mut seen = Vec::new();
+        while let Some(step) = cursor.next().expect("cursor step") {
+            seen.push((step.entry.path.to_string(arena.as_ref()), step.value));
+        }
+
+        let expected = vec![
+            ("a".to_string(), SymbolValue::Unsigned(1)),
+            ("b".to_string(), SymbolValue::Unsigned(2)),
+            ("c".to_string(), SymbolValue::Unsigned(3)),
+            ("d".to_string(), SymbolValue::Unsigned(4)),
+            ("e".to_string(), SymbolValue::Unsigned(5)),
+        ];
+        assert_eq!(seen, expected, "cursor should decode each 3-bit field independently");
+    }
+
+    #[test]
+    fn bitfield_sign_extension_honors_pad() {
+        let mut arena = TypeArena::new();
+        let backing_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            builder.scalar(Some("reg"), 1, ScalarEncoding::Unsigned, DisplayFormat::Hex)
+        };
+        let bitfield_id = {
+            let spec = BitFieldSpec::builder(backing_id)
+                .range(4, 4)
+                .pad(PadSpec::new(PadKind::Sign, 4))
+                .signed(true)
+                .finish();
+            arena.push_record(TypeRecord::BitField(spec))
+        };
+        let agg_id = {
+            let mut builder = TypeBuilder::new(&mut arena);
+            builder
+                .aggregate(AggregateKind::Struct)
+                .layout(1, 0)
+                .member("field", bitfield_id, 0)
+                .finish()
+        };
+        let arena = Arc::new(arena);
+        let mut table = SymbolTable::new(Arc::clone(&arena));
+        let handle = table
+            .builder()
+            .label("PADDED")
+            .type_id(agg_id)
+            .runtime_addr(0x70)
+            .size(1)
+            .finish();
+
+        let (bus, memory) = make_bus(0x80);
+        memory.write(0x70, &[0xE0]).unwrap();
+
+        let mut symbol_handle = SymbolHandle::new(&table, bus);
+        let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
+        let value = cursor.next().expect("bitfield entry").expect("value");
+        assert_eq!(value.entry.path.to_string(arena.as_ref()), "field");
+        assert_eq!(value.value, SymbolValue::Signed(-2), "sign pad should extend high bit");
     }
 
     #[test]

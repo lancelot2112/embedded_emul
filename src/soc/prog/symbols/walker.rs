@@ -171,9 +171,9 @@ impl<'arena> SymbolWalker<'arena> {
                         ty: frame.ty,
                         path: frame.path,
                         offset_bits: frame.offset_bits,
-                        bit_len: bitfield.width_bits as u32,
+                        bit_len: bitfield.total_width() as u32,
                         kind: ValueKind::Unsigned {
-                            bytes: ((bitfield.width_bits as u32) + 7) / 8,
+                            bytes: ((bitfield.total_width() as u32) + 7) / 8,
                         },
                     });
                 }
@@ -252,7 +252,7 @@ fn scalar_bits(ty: TypeId, arena: &TypeArena) -> Option<u32> {
         TypeRecord::Enum(enum_type) => Some(enum_type.base.byte_size * 8),
         TypeRecord::Fixed(fixed) => Some(fixed.base.byte_size * 8),
         TypeRecord::Pointer(pointer) => Some(pointer.byte_size * 8),
-        TypeRecord::BitField(bitfield) => Some(bitfield.width_bits as u32),
+        TypeRecord::BitField(bitfield) => Some(bitfield.total_width() as u32),
         _ => None,
     }
 }

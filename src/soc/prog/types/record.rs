@@ -5,7 +5,8 @@ use super::arena::{StringId, TypeId};
 use super::callable::CallableType;
 use super::dynamic::DynamicAggregate;
 use super::pointer::PointerType;
-use super::scalar::{BitFieldType, EnumType, FixedScalar, ScalarType};
+use super::bitfield::BitFieldSpec;
+use super::scalar::{EnumType, FixedScalar, ScalarType};
 use super::sequence::SequenceType;
 
 /// Compact representation of the byte size and trailing bit padding of a layout.
@@ -95,7 +96,7 @@ pub struct OpaqueType {
 pub enum TypeRecord {
     Scalar(ScalarType),
     Enum(EnumType),
-    BitField(BitFieldType),
+    BitField(BitFieldSpec),
     Fixed(FixedScalar),
     Sequence(SequenceType),
     Pointer(PointerType),
