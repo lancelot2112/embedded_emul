@@ -25,12 +25,23 @@ pub enum TokenKind {
     RBrace,
     LParen,
     RParen,
+    LessThan,
+    GreaterThan,
     Pipe,
     Equals,
     Comma,
+    Semicolon,
     Question,
     Dash,
     Plus,
+    Bang,
+    Percent,
+    Caret,
+    Ampersand,
+    Asterisk,
+    Tilde,
+    Backtick,
+    Apostrophe,
     EOF,
 }
 
@@ -89,10 +100,13 @@ impl<'src> Lexer<'src> {
             '}' => Ok(self.consume_single(TokenKind::RBrace)),
             '(' => Ok(self.consume_single(TokenKind::LParen)),
             ')' => Ok(self.consume_single(TokenKind::RParen)),
+            '<' => Ok(self.consume_single(TokenKind::LessThan)),
+            '>' => Ok(self.consume_single(TokenKind::GreaterThan)),
             '[' => self.consume_range_token(),
             '|' => Ok(self.consume_single(TokenKind::Pipe)),
             '=' => Ok(self.consume_single(TokenKind::Equals)),
             ',' => Ok(self.consume_single(TokenKind::Comma)),
+            ';' => Ok(self.consume_single(TokenKind::Semicolon)),
             '@' => self.consume_bit_expr(),
             '?' => Ok(self.consume_single(TokenKind::Question)),
             '-' => {
@@ -109,6 +123,14 @@ impl<'src> Lexer<'src> {
                 }
             }
             '+' => Ok(self.consume_single(TokenKind::Plus)),
+            '!' => Ok(self.consume_single(TokenKind::Bang)),
+            '%' => Ok(self.consume_single(TokenKind::Percent)),
+            '^' => Ok(self.consume_single(TokenKind::Caret)),
+            '&' => Ok(self.consume_single(TokenKind::Ampersand)),
+            '*' => Ok(self.consume_single(TokenKind::Asterisk)),
+            '~' => Ok(self.consume_single(TokenKind::Tilde)),
+            '`' => Ok(self.consume_single(TokenKind::Backtick)),
+            '\'' => Ok(self.consume_single(TokenKind::Apostrophe)),
             '#' => {
                 self.consume_line_comment();
                 self.next_token()
@@ -633,6 +655,28 @@ mod tests {
         assert_eq!(
             stream,
             vec![TokenKind::Number, TokenKind::Number, TokenKind::Number, TokenKind::EOF]
+        );
+    }
+
+    #[test]
+    fn lexes_additional_punctuation() {
+        let stream = kinds("! % ^ & * ~ ` ' < > ;");
+        assert_eq!(
+            stream,
+            vec![
+                TokenKind::Bang,
+                TokenKind::Percent,
+                TokenKind::Caret,
+                TokenKind::Ampersand,
+                TokenKind::Asterisk,
+                TokenKind::Tilde,
+                TokenKind::Backtick,
+                TokenKind::Apostrophe,
+                TokenKind::LessThan,
+                TokenKind::GreaterThan,
+                TokenKind::Semicolon,
+                TokenKind::EOF
+            ]
         );
     }
 
