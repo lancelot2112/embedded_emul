@@ -277,9 +277,9 @@ Forms act as type templates that instructions can be typed with, providing reusa
 }
 ```
 
-#### 7.1.3 Form Inheritance
+#### 7.1.3 Form Composition
 
-Forms can inherit from other forms within the same logic space, allowing extension and refinement of base encoding patterns.
+Forms can compose with other forms within the same logic space, allowing extension and refinement of base encoding patterns.
 
 **Syntax**:
 ```
@@ -289,14 +289,14 @@ Forms can inherit from other forms within the same logic space, allowing extensi
 }
 ```
 
-**Inheritance Rules**:
+**Composition Rules**:
 1. **Preserve bit ranges**: Inherited fields maintain their original bit range declarations
 2. **Allow overlaps**: Child form fields may overlap with inherited fields
 3. **Overlap warnings**: Language tools should warn when new fields overlap with inherited fields
 4. **No greedy changes**: Bit ranges of inherited fields cannot be modified
 5. **Force new forms**: For bit range modifications, create a new form rather than inheriting
 
-**Example Form Inheritance**:
+**Example Form Composition**:
 ```isa
 # Base X_Form
 :powerpc_insn X_Form subfields={
@@ -843,21 +843,6 @@ Each subfield definition shall occur within a `subfields={}` option tag context 
     SO @(0) descr="Summary Overflow"
     OV @(1) descr="Overflow"
     CA @(2) descr="Carry"
-}
-
-:space insn addr=32 word=32 type=rw
-
-# Untagged subfield definitions for instructions
-:insn subfields={
-    AA @(30) op=func descr="Absolute Address flag, bit 30"
-    BD @(16..29|0b00) op=imm descr="Displacement, bits 16..29, padded with 00b"
-    rA @(11..15) op=reg.GPR descr="Register A, bits 11..15, is a GPR"
-    opc6 @(0..5) op=func descr="Primary 6-bit opcode field, bits 0..5"
-}
-
-:insn size=16 subfields={
-    AA16 @(14) op=func # inline comment
-    # error_bitidx @(20) # should provide error because maximum bit index is 15 in this space
 }
 ```
 
