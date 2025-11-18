@@ -809,6 +809,7 @@ Each subfield definition shall occur within a `subfields={}` option tag context 
 
 - **Simple Types**: All simple types must have a valid format and value according to the simple type.
 - **Redirect Mutual Exclusivity**: `redirect` cannot be used with `offset` or `size` as it will take on the `size` and `offset` of the redirect 
+- **Redirect Ordering**: `redirect` references must resolve to fields (and optional subfields) that have already been declared, even when the reference targets another space via `$space::field::subfield`.
 - **Index Range Validation**: When using bracket notation, `start_index` ≤ `end_index`, both must be ≥ 0, and the total count (`end_index .. start_index + 1`) must be ≤ 65535
 - **Mutually Exclusive Attributes**: Bracket notation cannot be used with deprecated `count=` or `name=` attributes
 - **Field Name Tracking**: Generated field_names (from bracket notation or field_tag if no bracket notation provided) are tracked for later redirect validation or access.
