@@ -382,7 +382,11 @@ fn logic_word_size(space: &SpaceDecl) -> Option<u32> {
 mod tests {
     use super::*;
     use crate::loader::isa::parse_str;
-    use crate::soc::isa::diagnostic::DiagnosticPhase;
+    use crate::soc::isa::ast::{
+        FormDecl, InstructionDecl, IsaDocument, IsaItem, SpaceAttribute, SpaceDecl, SpaceKind,
+        SpaceMember, SpaceMemberDecl, SubFieldDecl,
+    };
+    use crate::soc::isa::diagnostic::{DiagnosticPhase, SourcePosition, SourceSpan};
     use std::path::PathBuf;
 
     fn validate_src(source: &str) -> Result<(), IsaError> {
@@ -403,6 +407,65 @@ mod tests {
                 );
             }
             other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    fn manual_span() -> SourceSpan {
+        SourceSpan::point(PathBuf::from("manual.isa"), SourcePosition::new(1, 1))
+    }
+
+    fn validate_items(items: Vec<IsaItem>) -> Result<(), IsaError> {
+        let doc = IsaDocument::new(PathBuf::from("manual.isa"), items);
+        let mut validator = Validator::new();
+        validator.validate(&[doc])
+    }
+
+    fn space_decl(name: &str, kind: SpaceKind, attributes: Vec<SpaceAttribute>) -> IsaItem {
+        IsaItem::Space(SpaceDecl {
+            name: name.to_string(),
+            kind,
+            attributes,
+            span: manual_span(),
+        })
+    }
+
+    fn logic_form(space: &str, name: &str) -> IsaItem {
+        IsaItem::SpaceMember(SpaceMemberDecl {
+            space: space.to_string(),
+            member: SpaceMember::Form(FormDecl {
+                space: space.to_string(),
+                name: name.to_string(),
+                parent: None,
+                description: None,
+                subfields: vec![simple_subfield("OPCD")],
+                span: manual_span(),
+            }),
+        })
+    }
+
+    fn logic_instruction(space: &str, form: Option<&str>, name: &str) -> IsaItem {
+        IsaItem::SpaceMember(SpaceMemberDecl {
+            space: space.to_string(),
+            member: SpaceMember::Instruction(InstructionDecl {
+                space: space.to_string(),
+                form: form.map(|f| f.to_string()),
+                name: name.to_string(),
+                description: None,
+                operands: Vec::new(),
+                mask: None,
+                encoding: None,
+                semantics: None,
+                span: manual_span(),
+            }),
+        })
+    }
+
+    fn simple_subfield(name: &str) -> SubFieldDecl {
+        SubFieldDecl {
+            name: name.to_string(),
+            bit_spec: "@(0..5)".to_string(),
+            operations: Vec::new(),
+            description: None,
         }
     }
 
@@ -548,5 +611,97 @@ mod tests {
             ":space logic addr=32 word=32 type=logic\n:logic BASE subfields={\n    OPCD @(0..5) op=func\n}\n:logic::BASE EXT subfields={\n    RT @(6..10) op=target\n}\n:logic::EXT add mask={OPCD=31}",
         )
         .expect("logic instruction referencing inherited form fields should validate");
+    }
+
+    #[test]
+    fn logic_form_requires_subfield_entries() {
+        let err = validate_src(":space logic addr=32 word=32 type=logic\n:logic FORM subfields={}")
+            .unwrap_err();
+        expect_validation_diag(err, "must declare at least one subfield");
+    }
+
+    #[test]
+    fn logic_form_rejects_non_logic_space() {
+        let err = validate_items(vec![
+            space_decl(
+                "reg",
+                SpaceKind::Register,
+                vec![
+                    SpaceAttribute::AddressBits(32),
+                    SpaceAttribute::WordSize(32),
+                ],
+            ),
+            logic_form("reg", "FORM"),
+        ])
+        .unwrap_err();
+        expect_validation_diag(err, "form 'FORM' can only be declared inside logic spaces");
+    }
+
+    #[test]
+    fn logic_instruction_rejects_non_logic_space() {
+        let err = validate_items(vec![
+            space_decl(
+                "reg",
+                SpaceKind::Register,
+                vec![
+                    SpaceAttribute::AddressBits(32),
+                    SpaceAttribute::WordSize(32),
+                ],
+            ),
+            logic_instruction("reg", Some("FORM"), "add"),
+        ])
+        .unwrap_err();
+        expect_validation_diag(
+            err,
+            "instruction 'add' can only be declared inside logic spaces",
+        );
+    }
+
+    #[test]
+    fn logic_instruction_requires_form_reference() {
+        let err = validate_items(vec![
+            space_decl(
+                "logic",
+                SpaceKind::Logic,
+                vec![
+                    SpaceAttribute::AddressBits(32),
+                    SpaceAttribute::WordSize(32),
+                ],
+            ),
+            logic_instruction("logic", None, "add"),
+        ])
+        .unwrap_err();
+        expect_validation_diag(err, "must reference a form");
+    }
+
+    #[test]
+    fn logic_space_missing_word_size_reports_all_errors() {
+        let err = validate_items(vec![
+            space_decl(
+                "logic",
+                SpaceKind::Logic,
+                vec![SpaceAttribute::AddressBits(32)],
+            ),
+            logic_form("logic", "FORM"),
+        ])
+        .unwrap_err();
+        match err {
+            IsaError::Diagnostics {
+                phase: DiagnosticPhase::Validation,
+                diagnostics,
+            } => {
+                assert!(
+                    diagnostics
+                        .iter()
+                        .any(|diag| diag.message.contains("missing word size"))
+                );
+                assert!(
+                    diagnostics
+                        .iter()
+                        .any(|diag| diag.message.contains("has no state"))
+                );
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }
