@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::soc::isa::ast::{IsaDocument, SpaceKind};
+use crate::soc::isa::ast::{IsaSpecification, SpaceKind};
 use crate::soc::isa::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
 use crate::soc::isa::error::IsaError;
 
@@ -29,7 +29,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub fn parse_document(&mut self) -> Result<IsaDocument, IsaError> {
+    pub fn parse_document(&mut self) -> Result<IsaSpecification, IsaError> {
         let mut items = Vec::new();
         while !self.check(TokenKind::EOF)? {
             match self.parse_directive() {
@@ -39,7 +39,7 @@ impl<'src> Parser<'src> {
         }
 
         if self.diagnostics.is_empty() {
-            Ok(IsaDocument::new(self.path.clone(), items))
+            Ok(IsaSpecification::new(self.path.clone(), items))
         } else {
             Err(IsaError::Diagnostics {
                 phase: DiagnosticPhase::Parser,
@@ -177,7 +177,7 @@ impl<'src> Parser<'src> {
 
 /// Convenience helper used by the loader when parsing files without needing to hold onto the
 /// parser instance.
-pub fn parse_str(path: PathBuf, src: &str) -> Result<IsaDocument, IsaError> {
+pub fn parse_str(path: PathBuf, src: &str) -> Result<IsaSpecification, IsaError> {
     let mut parser = Parser::new(src, path);
     parser.parse_document()
 }

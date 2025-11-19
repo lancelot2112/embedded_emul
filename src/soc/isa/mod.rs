@@ -5,6 +5,7 @@
 //! disassembling binary streams and emitting IR semantics.
 
 pub mod ast;
+pub mod builder;
 pub mod diagnostic;
 pub mod error;
 pub mod handle;
@@ -15,5 +16,6 @@ pub mod semantics;
 mod space;
 pub mod validator;
 
+pub use builder::IsaBuilder;
 pub use handle::IsaHandle;
 pub use machine::{Disassembly, MachineDescription};

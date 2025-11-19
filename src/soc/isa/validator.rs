@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ast::{
-    ContextReference, FieldDecl, FormDecl, InstructionDecl, IsaDocument, IsaItem, MaskSelector,
+    ContextReference, FieldDecl, FormDecl, InstructionDecl, IsaSpecification, IsaItem, MaskSelector,
     SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember, SpaceMemberDecl,
 };
 use super::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
@@ -34,7 +34,7 @@ impl Validator {
         }
     }
 
-    pub fn validate(&mut self, docs: &[IsaDocument]) -> Result<(), IsaError> {
+    pub fn validate(&mut self, docs: &[IsaSpecification]) -> Result<(), IsaError> {
         for doc in docs {
             for item in &doc.items {
                 match item {
@@ -58,7 +58,7 @@ impl Validator {
         }
     }
 
-    pub fn finalize_machine(&self, docs: Vec<IsaDocument>) -> Result<MachineDescription, IsaError> {
+    pub fn finalize_machine(&self, docs: Vec<IsaSpecification>) -> Result<MachineDescription, IsaError> {
         MachineDescription::from_documents(docs)
     }
 
@@ -383,7 +383,7 @@ mod tests {
     use super::*;
     use crate::loader::isa::parse_str;
     use crate::soc::isa::ast::{
-        FormDecl, InstructionDecl, IsaDocument, IsaItem, SpaceAttribute, SpaceDecl, SpaceKind,
+        FormDecl, InstructionDecl, IsaSpecification, IsaItem, SpaceAttribute, SpaceDecl, SpaceKind,
         SpaceMember, SpaceMemberDecl, SubFieldDecl,
     };
     use crate::soc::isa::diagnostic::{DiagnosticPhase, SourcePosition, SourceSpan};
@@ -415,7 +415,7 @@ mod tests {
     }
 
     fn validate_items(items: Vec<IsaItem>) -> Result<(), IsaError> {
-        let doc = IsaDocument::new(PathBuf::from("manual.isa"), items);
+        let doc = IsaSpecification::new(PathBuf::from("manual.isa"), items);
         let mut validator = Validator::new();
         validator.validate(&[doc])
     }

@@ -83,7 +83,7 @@ mod tests {
 
     use super::super::parse_str;
 
-    fn parse(source: &str) -> crate::soc::isa::ast::IsaDocument {
+    fn parse(source: &str) -> crate::soc::isa::ast::IsaSpecification {
         parse_str(PathBuf::from("test.isa"), source).expect("parse")
     }
 

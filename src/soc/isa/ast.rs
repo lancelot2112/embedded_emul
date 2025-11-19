@@ -10,12 +10,12 @@ use super::semantics::SemanticBlock;
 
 /// Represents a fully parsed ISA-like source file.
 #[derive(Debug, Clone)]
-pub struct IsaDocument {
+pub struct IsaSpecification {
     pub path: PathBuf,
     pub items: Vec<IsaItem>,
 }
 
-impl IsaDocument {
+impl IsaSpecification {
     pub fn new(path: PathBuf, items: Vec<IsaItem>) -> Self {
         Self { path, items }
     }

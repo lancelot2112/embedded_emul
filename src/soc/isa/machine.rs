@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::soc::prog::types::bitfield::BitFieldSpec;
 
-use super::ast::{InstructionDecl, IsaDocument, IsaItem, SpaceMember};
+use super::ast::{InstructionDecl, IsaSpecification, IsaItem, SpaceMember};
 use super::error::IsaError;
 use super::semantics::SemanticBlock;
 
@@ -22,7 +22,7 @@ impl MachineDescription {
         }
     }
 
-    pub fn from_documents(docs: Vec<IsaDocument>) -> Result<Self, IsaError> {
+    pub fn from_documents(docs: Vec<IsaSpecification>) -> Result<Self, IsaError> {
         let mut machine = MachineDescription::new();
         for doc in docs {
             for item in doc.items {

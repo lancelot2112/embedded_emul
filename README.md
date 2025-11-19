@@ -151,6 +151,45 @@ nanemu/
 
 ---
 
+## 🧱 ISA Pipeline & API Boundaries
+
+The ISA toolchain is intentionally split so each stage can be reused outside the text-based loader:
+
+- **Loader (`loader/isa`)** → Handles files, includes, and parsing. It converts `.isa` sources into pure `IsaDocument` ASTs but makes no claims about correctness.
+- **Semantic layer (`soc/isa/validator.rs`)** → Owns the ISA rules: space kinds, logic forms, redirects, and mask checks. Anything that produces `IsaDocument`s—file loaders, CLI tools, or custom generators—should pass through this validator before continuing.
+- **Runtime (`soc/isa/machine.rs`)** → Turns validated documents into a `MachineDescription` (instructions, spaces, and semantic IR) that the rest of the emulator consumes.
+- **Convenience (`soc/isa/handle.rs`)** → `IsaHandle::from_files` just wires the three stages together for file-based workflows.
+
+To make programmatic scenarios obvious, the new `IsaBuilder` helper lets you assemble ASTs entirely in memory (e.g., from CLI arguments or another DSL) while still benefiting from the shared validator/runtime:
+
+```rust
+use nanemu::soc::isa::ast::{SpaceAttribute, SpaceKind};
+use nanemu::soc::isa::builder::{mask_field_selector, subfield};
+use nanemu::soc::isa::{IsaBuilder, MachineDescription, Validator};
+
+let mut builder = IsaBuilder::new("generated.isa");
+builder.add_space(
+   "logic",
+   SpaceKind::Logic,
+   vec![SpaceAttribute::AddressBits(32), SpaceAttribute::WordSize(32)],
+);
+builder.add_form("logic", "FORM", None, vec![subfield("OPCD", "@(0..5)")]);
+builder
+   .instruction("logic", "add")
+   .form("FORM")
+   .mask_field(mask_field_selector("OPCD"), 0x1f)
+   .finish();
+
+let doc = builder.build();
+let mut validator = Validator::new();
+validator.validate(&[doc.clone()])?;
+let machine = validator.finalize_machine(vec![doc])?;
+```
+
+`IsaLoader` now becomes “just another producer” of documents. Your own tools can skip the loader entirely, feed custom documents through the same validator, and obtain the same `MachineDescription` artifacts—making the contract between modules explicit.
+
+---
+
 ## 🧪 Example: Testing a Function
 
 ```rust

@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::loader::isa::parse_str;
-use crate::soc::isa::ast::{IncludeDecl, IsaDocument, IsaItem};
+use crate::soc::isa::ast::{IncludeDecl, IsaSpecification, IsaItem};
 use crate::soc::isa::error::IsaError;
 use crate::soc::isa::machine::MachineDescription;
 use crate::soc::isa::validator::Validator;
@@ -33,7 +33,7 @@ impl IsaLoader {
         validator.finalize_machine(docs)
     }
 
-    fn collect_documents(&mut self, path: &Path) -> Result<Vec<IsaDocument>, IsaError> {
+    fn collect_documents(&mut self, path: &Path) -> Result<Vec<IsaSpecification>, IsaError> {
         if !self.visited.insert(path.to_path_buf()) {
             return Ok(Vec::new());
         }
@@ -72,7 +72,7 @@ impl IsaLoader {
         &mut self,
         parent: &Path,
         include: &IncludeDecl,
-    ) -> Result<Vec<IsaDocument>, IsaError> {
+    ) -> Result<Vec<IsaSpecification>, IsaError> {
         let include_path = if include.path.is_relative() {
             parent
                 .parent()
