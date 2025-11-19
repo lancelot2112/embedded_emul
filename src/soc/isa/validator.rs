@@ -1,6 +1,6 @@
 //! Semantic validation for parsed ISA documents and the merged machine description.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::ast::{
     ContextReference, FieldDecl, IsaDocument, IsaItem, SpaceDecl, SpaceMember, SpaceMemberDecl,
@@ -8,7 +8,8 @@ use super::ast::{
 use super::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
 use super::error::IsaError;
 use super::machine::MachineDescription;
-use crate::soc::prog::types::parse_index_suffix;
+use super::register::FieldRegistrationError;
+use super::space::{resolve_reference_path, SpaceState};
 
 pub struct Validator {
     seen_spaces: BTreeSet<String>,
@@ -92,7 +93,7 @@ impl Validator {
             return;
         };
 
-        if let Err(FieldRegistrationError::DuplicateField) = register_field(state, field) {
+        if let Err(FieldRegistrationError::DuplicateField) = state.register_field(field) {
             self.push_validation_diagnostic(
                 "validation.duplicate-field",
                 format!("field '{}' declared multiple times", field.name),
@@ -267,111 +268,5 @@ mod tests {
             other => panic!("unexpected error: {other:?}"),
         }
     }
-}
-
-#[derive(Default)]
-struct SpaceState {
-    fields: HashMap<String, FieldInfo>,
-    ranges: Vec<RangedFieldInfo>,
-}
-
-impl SpaceState {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn lookup_field(&self, name: &str) -> Option<FieldLookup<'_>> {
-        if let Some(info) = self.fields.get(name) {
-            return Some(FieldLookup::Direct(info));
-        }
-        for entry in &self.ranges {
-            if entry.matches(name) {
-                return Some(FieldLookup::Ranged(entry));
-            }
-        }
-        None
-    }
-}
-
-struct FieldInfo {
-    subfields: HashSet<String>,
-}
-
-struct RangedFieldInfo {
-    base: String,
-    start: u32,
-    end: u32,
-    subfields: HashSet<String>,
-}
-
-enum FieldLookup<'a> {
-    Direct(&'a FieldInfo),
-    Ranged(&'a RangedFieldInfo),
-}
-
-impl<'a> FieldLookup<'a> {
-    fn has_subfield(&self, name: &str) -> bool {
-        match self {
-            FieldLookup::Direct(info) => info.subfields.contains(name),
-            FieldLookup::Ranged(info) => info.subfields.contains(name),
-        }
-    }
-}
-
-impl RangedFieldInfo {
-    fn matches(&self, candidate: &str) -> bool {
-        if !candidate.starts_with(&self.base) {
-            return false;
-        }
-        let suffix = &candidate[self.base.len()..];
-        if suffix.is_empty() {
-            return false;
-        }
-        match parse_index_suffix(suffix) {
-            Ok(index) => index >= self.start && index <= self.end,
-            Err(_) => false,
-        }
-    }
-}
-
-fn resolve_reference_path(
-    current_space: &str,
-    reference: &ContextReference,
-) -> (String, Vec<String>) {
-    if let Some(first) = reference.segments.first() {
-        if first.starts_with('$') {
-            let space = first.trim_start_matches('$').to_string();
-            let rest = reference.segments[1..].to_vec();
-            return (space, rest);
-        }
-    }
-    (current_space.to_string(), reference.segments.clone())
-}
-
-enum FieldRegistrationError {
-    DuplicateField,
-}
-
-fn register_field(state: &mut SpaceState, field: &FieldDecl) -> Result<(), FieldRegistrationError> {
-    let subfields: HashSet<String> = field.subfields.iter().map(|sub| sub.name.clone()).collect();
-    if let Some(range) = &field.range {
-        if state.ranges.iter().any(|entry| entry.base == field.name) {
-            return Err(FieldRegistrationError::DuplicateField);
-        }
-        state.ranges.push(RangedFieldInfo {
-            base: field.name.clone(),
-            start: range.start,
-            end: range.end,
-            subfields,
-        });
-    } else {
-        if state.fields.contains_key(&field.name) {
-            return Err(FieldRegistrationError::DuplicateField);
-        }
-        state
-            .fields
-            .insert(field.name.clone(), FieldInfo { subfields });
-    }
-    Ok(())
 }
 

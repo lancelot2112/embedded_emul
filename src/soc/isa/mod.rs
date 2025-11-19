@@ -10,6 +10,8 @@ pub mod error;
 pub mod handle;
 pub mod machine;
 pub mod semantics;
+mod register;
+mod space;
 pub mod validator;
 
 pub use handle::IsaHandle;
