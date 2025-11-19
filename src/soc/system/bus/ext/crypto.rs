@@ -1,10 +1,6 @@
 //! Lightweight helpers for reading simple cryptographic primitives.
 
-use crate::soc::system::bus::{
-    BusResult,
-    DataHandle,
-    ext::stream::ByteDataHandleExt,
-};
+use crate::soc::system::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
 use sha2::{Digest, Sha256};
 
 pub trait CryptoDataHandleExt {

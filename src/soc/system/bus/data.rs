@@ -122,8 +122,7 @@ impl DataHandle {
                     let current_value = cache.chunk_value(device_endian);
 
                     let byte_len = bytes_for_len(bit_len);
-                    let write_bytes =
-                        device_endian.encode_bits(value, bit_len as usize, byte_len);
+                    let write_bytes = device_endian.encode_bits(value, bit_len as usize, byte_len);
                     let value_bits =
                         device_endian.decode_bits(&write_bytes[..byte_len], bit_len as usize);
 

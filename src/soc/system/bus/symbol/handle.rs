@@ -7,11 +7,7 @@ use crate::soc::prog::symbols::{
     SymbolHandle as TableSymbolHandle, SymbolId, SymbolRecord, SymbolTable,
 };
 use crate::soc::prog::types::arena::{TypeArena, TypeId};
-use crate::soc::system::bus::{
-    DataHandle,
-    DeviceBus,
-    ext::stream::ByteDataHandleExt,
-};
+use crate::soc::system::bus::{DataHandle, DeviceBus, ext::stream::ByteDataHandleExt};
 
 use super::cursor::SymbolValueCursor;
 use super::read::{ReadContext, read_type_record};

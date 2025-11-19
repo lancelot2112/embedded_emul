@@ -3,8 +3,7 @@
 use std::borrow::Cow;
 
 use crate::soc::system::bus::{
-    BusResult,
-    DataHandle,
+    BusResult, DataHandle,
     ext::{int::IntDataHandleExt, stream::ByteDataHandleExt},
 };
 

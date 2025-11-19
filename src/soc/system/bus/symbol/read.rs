@@ -59,7 +59,7 @@ impl SymbolReadable for ScalarType {
                 let value = if width == 0 {
                     0
                 } else {
-                    ctx.data.read_unsigned(width)?
+                    ctx.data.read_unsigned(0, width * 8)?
                 };
                 Some(SymbolValue::Unsigned(value))
             }
@@ -67,7 +67,7 @@ impl SymbolReadable for ScalarType {
                 let value = if width == 0 {
                     0
                 } else {
-                    ctx.data.read_signed(width)?
+                    ctx.data.read_signed(0, width * 8)?
                 };
                 Some(SymbolValue::Signed(value))
             }
@@ -104,7 +104,7 @@ impl SymbolReadable for EnumType {
         let value = if width == 0 {
             0
         } else {
-            ctx.data.read_signed(width)?
+            ctx.data.read_signed(0, width * 8)?
         };
         let label = self
             .label_for(value)
@@ -123,7 +123,7 @@ impl SymbolReadable for FixedScalar {
         if width == 0 {
             return Ok(Some(SymbolValue::Float(self.apply(0))));
         }
-        let raw = ctx.data.read_signed(width)?;
+        let raw = ctx.data.read_signed(0, width * 8)?;
         Ok(Some(SymbolValue::Float(self.apply(raw))))
     }
 }
@@ -141,7 +141,7 @@ impl SymbolReadable for PointerType {
         let value = if width == 0 {
             0
         } else {
-            ctx.data.read_unsigned(width)?
+            ctx.data.read_unsigned(0, width * 8)?
         };
         Ok(Some(SymbolValue::Unsigned(value)))
     }
@@ -173,8 +173,8 @@ impl SymbolReadable for BitFieldSpec {
             let bit_offset = (entry_bit_base - aligned_bit_base) as u8;
             let byte_address = ctx.symbol_base + (aligned_bit_base / 8);
             ctx.data.address_mut().jump(byte_address)?;
-            let bits = ctx.data.read_bits(bit_offset, max_bit)?;
-            container_bits = bits as u64;
+            let bits = ctx.data.read_unsigned(bit_offset, max_bit as usize)?;
+            container_bits = bits;
         }
         let (raw_value, actual_width) = self.read_bits(container_bits);
         debug_assert_eq!(self.total_width(), actual_width);
