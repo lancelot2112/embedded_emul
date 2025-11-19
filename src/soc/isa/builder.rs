@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use crate::soc::isa::ast::{
-    FormDecl, InstructionDecl, IsaSpecification, IsaItem, MaskField, MaskSelector, MaskSpec,
+    FormDecl, InstructionDecl, IsaItem, IsaSpecification, MaskField, MaskSelector, MaskSpec,
     SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember, SpaceMemberDecl, SubFieldDecl, SubFieldOp,
 };
 use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
@@ -57,7 +57,6 @@ impl IsaBuilder {
     ) -> &mut Self {
         let space = space.into();
         let name = name.into();
-        let parent = parent.map(|value| value.into());
         let subfields: Vec<SubFieldDecl> = subfields.into_iter().collect();
         let form_decl = FormDecl {
             space: space.clone(),

@@ -58,6 +58,7 @@ impl StringPool {
     }
 }
 
+#[derive(Default)]
 pub struct TypeArena {
     records: Vec<TypeRecord>,
     members: Vec<MemberRecord>,
@@ -66,11 +67,7 @@ pub struct TypeArena {
 
 impl TypeArena {
     pub fn new() -> Self {
-        Self {
-            records: Vec::new(),
-            members: Vec::new(),
-            strings: StringPool::default(),
-        }
+        Self::default()
     }
 
     pub fn push_record(&mut self, record: TypeRecord) -> TypeId {

@@ -98,10 +98,7 @@ impl SymbolTable {
         if let Some(symbol_id) = record.symbol_id {
             self.by_symbol_id.insert(symbol_id, handle);
         }
-        self.by_label
-            .entry(record.label)
-            .or_insert_with(SmallVec::new)
-            .push(handle);
+        self.by_label.entry(record.label).or_default().push(handle);
         self.records.push(record);
         handle
     }

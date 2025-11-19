@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::soc::device::{Device, DeviceResult};
 
 use super::{
-    bus::DeviceBus,
+    DeviceBus,
     error::{BusError, BusResult},
     range::ResolvedRange,
 };

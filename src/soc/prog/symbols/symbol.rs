@@ -8,57 +8,37 @@ use crate::soc::prog::types::TypeId;
 use super::id::{LabelId, SymbolId};
 use super::source::SymbolProvenance;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SymbolState {
+    #[default]
     Declared,
     Defined,
     Imported,
 }
 
-impl Default for SymbolState {
-    fn default() -> Self {
-        SymbolState::Declared
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SymbolKind {
+    #[default]
     Object,
     Function,
     Section,
     Metadata,
 }
 
-impl Default for SymbolKind {
-    fn default() -> Self {
-        SymbolKind::Object
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SymbolBinding {
+    #[default]
     Local,
     Global,
     Weak,
 }
 
-impl Default for SymbolBinding {
-    fn default() -> Self {
-        SymbolBinding::Local
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SymbolVisibility {
+    #[default]
     Default,
     Hidden,
     Protected,
-}
-
-impl Default for SymbolVisibility {
-    fn default() -> Self {
-        SymbolVisibility::Default
-    }
 }
 
 bitflags! {

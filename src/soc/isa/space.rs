@@ -9,10 +9,6 @@ pub(crate) struct SpaceState {
 }
 
 impl SpaceState {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     pub(crate) fn lookup_field(&self, name: &str) -> Option<&FieldInfo> {
         self.fields.get(name)
     }
@@ -55,12 +51,12 @@ pub(crate) fn resolve_reference_path(
     current_space: &str,
     reference: &ContextReference,
 ) -> (String, Vec<String>) {
-    if let Some(first) = reference.segments.first() {
-        if first.starts_with('$') {
-            let space = first.trim_start_matches('$').to_string();
-            let rest = reference.segments[1..].to_vec();
-            return (space, rest);
-        }
+    if let Some(first) = reference.segments.first()
+        && first.starts_with('$')
+    {
+        let space = first.trim_start_matches('$').to_string();
+        let rest = reference.segments[1..].to_vec();
+        return (space, rest);
     }
     (current_space.to_string(), reference.segments.clone())
 }

@@ -4,11 +4,11 @@ use std::collections::BTreeMap;
 
 use crate::soc::prog::types::bitfield::BitFieldSpec;
 
-use super::ast::{InstructionDecl, IsaSpecification, IsaItem, SpaceMember};
+use super::ast::{InstructionDecl, IsaItem, IsaSpecification, SpaceMember};
 use super::error::IsaError;
 use super::semantics::SemanticBlock;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MachineDescription {
     pub instructions: Vec<Instruction>,
     pub spaces: BTreeMap<String, SpaceInfo>,
@@ -16,10 +16,7 @@ pub struct MachineDescription {
 
 impl MachineDescription {
     pub fn new() -> Self {
-        Self {
-            instructions: Vec::new(),
-            spaces: BTreeMap::new(),
-        }
+        Self::default()
     }
 
     pub fn from_documents(docs: Vec<IsaSpecification>) -> Result<Self, IsaError> {

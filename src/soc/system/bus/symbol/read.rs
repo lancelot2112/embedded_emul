@@ -168,12 +168,12 @@ impl SymbolReadable for BitFieldSpec {
         }
         let mut container_bits = 0u64;
         if let Some((_, max_bit)) = self.bit_span() {
-            let entry_bit_base = entry.offset_bits as u64;
+            let entry_bit_base = entry.offset_bits;
             let aligned_bit_base = entry_bit_base & !7;
             let bit_offset = (entry_bit_base - aligned_bit_base) as u32;
             let total_bits = bit_offset as u64 + max_bit as u64;
             let byte_address = ctx.symbol_base + (aligned_bit_base / 8);
-            let byte_span = ((total_bits + 7) / 8) as usize;
+            let byte_span = total_bits.div_ceil(8) as usize;
             let mut buf = vec![0u8; byte_span];
             ctx.data.address_mut().jump(byte_address)?;
             if !buf.is_empty() {

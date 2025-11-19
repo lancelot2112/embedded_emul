@@ -9,7 +9,7 @@ pub trait FloatDataHandleExt {
 
 impl FloatDataHandleExt for DataHandle {
     fn read_f32(&mut self) -> BusResult<f32> {
-        let bits = self.read_u32()? as u32;
+        let bits = self.read_u32()?;
         Ok(f32::from_bits(bits))
     }
 

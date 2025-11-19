@@ -58,8 +58,12 @@ impl<'arena> MemberCursor<'arena> {
             });
         }
     }
+}
 
-    pub fn next(&mut self) -> Option<ResolvedMember<'arena>> {
+impl<'arena> Iterator for MemberCursor<'arena> {
+    type Item = ResolvedMember<'arena>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         while let Some(frame) = self.stack.last_mut() {
             if frame.index >= frame.members.len() {
                 self.stack.pop();

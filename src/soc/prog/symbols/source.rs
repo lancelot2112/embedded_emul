@@ -13,17 +13,12 @@ bitflags! {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SourceTrust {
+    #[default]
     Unknown,
     Trusted,
     Suspicious,
-}
-
-impl Default for SourceTrust {
-    fn default() -> Self {
-        SourceTrust::Unknown
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

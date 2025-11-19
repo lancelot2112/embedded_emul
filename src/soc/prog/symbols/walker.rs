@@ -32,7 +32,7 @@ pub struct SymbolWalkEntry {
 
 impl SymbolWalkEntry {
     pub fn byte_len(&self) -> u32 {
-        (self.bit_len + 7) / 8
+        self.bit_len.div_ceil(8)
     }
 }
 
@@ -121,7 +121,42 @@ impl<'arena> SymbolWalker<'arena> {
         Self { arena, stack }
     }
 
-    pub fn next(&mut self) -> Option<SymbolWalkEntry> {
+    fn push_sequence(&mut self, frame: &FrameState, sequence: &SequenceType) {
+        let Some(count) = sequence.element_count() else {
+            return;
+        };
+        let stride = (sequence.stride_bytes as u64) * 8;
+        for index in (0..count).rev() {
+            let offset_bits = frame.offset_bits + (index as u64) * stride;
+            self.stack.push(FrameState {
+                ty: sequence.element,
+                offset_bits,
+                path: frame.path.push_index(index),
+            });
+        }
+    }
+
+    fn push_aggregate(&mut self, frame: &FrameState, aggregate: &AggregateType) {
+        if aggregate.members.is_empty() {
+            return;
+        }
+        let members = self.arena.members(aggregate.members);
+        for member in members.iter().rev() {
+            let offset_bits = frame.offset_bits + member.offset_bits as u64;
+            let path = frame.path.push_member(member.name_id);
+            self.stack.push(FrameState {
+                ty: member.ty,
+                offset_bits,
+                path,
+            });
+        }
+    }
+}
+
+impl<'arena> Iterator for SymbolWalker<'arena> {
+    type Item = SymbolWalkEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
         while let Some(frame) = self.stack.pop() {
             match self.arena.get(frame.ty) {
                 TypeRecord::Scalar(scalar) => {
@@ -173,7 +208,7 @@ impl<'arena> SymbolWalker<'arena> {
                         offset_bits: frame.offset_bits,
                         bit_len: bitfield.total_width() as u32,
                         kind: ValueKind::Unsigned {
-                            bytes: ((bitfield.total_width() as u32) + 7) / 8,
+                            bytes: (bitfield.total_width() as u32).div_ceil(8),
                         },
                     });
                 }
@@ -183,37 +218,6 @@ impl<'arena> SymbolWalker<'arena> {
             }
         }
         None
-    }
-
-    fn push_sequence(&mut self, frame: &FrameState, sequence: &SequenceType) {
-        let Some(count) = sequence.element_count() else {
-            return;
-        };
-        let stride = (sequence.stride_bytes as u64) * 8;
-        for index in (0..count).rev() {
-            let offset_bits = frame.offset_bits + (index as u64) * stride;
-            self.stack.push(FrameState {
-                ty: sequence.element,
-                offset_bits,
-                path: frame.path.push_index(index),
-            });
-        }
-    }
-
-    fn push_aggregate(&mut self, frame: &FrameState, aggregate: &AggregateType) {
-        if aggregate.members.is_empty() {
-            return;
-        }
-        let members = self.arena.members(aggregate.members);
-        for member in members.iter().rev() {
-            let offset_bits = frame.offset_bits + member.offset_bits as u64;
-            let path = frame.path.push_member(member.name_id);
-            self.stack.push(FrameState {
-                ty: member.ty,
-                offset_bits,
-                path,
-            });
-        }
     }
 }
 
@@ -305,9 +309,9 @@ mod tests {
         let mut builder = TypeBuilder::new(&mut arena);
         let word = builder.scalar(None, 2, ScalarEncoding::Unsigned, DisplayFormat::Hex);
         let seq_id = builder.sequence_static(word, 2, 3);
-        let mut walker = SymbolWalker::new(&arena, seq_id);
+        let walker = SymbolWalker::new(&arena, seq_id);
         let mut paths = Vec::new();
-        while let Some(entry) = walker.next() {
+        for entry in walker {
             paths.push(entry.path.to_string(&arena));
         }
         assert_eq!(paths, vec!["[0]", "[1]", "[2]"]);

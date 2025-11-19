@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
+    DeviceBus,
     address::AddressHandle,
-    bus::DeviceBus,
     error::{BusError, BusResult},
 };
 
@@ -120,7 +120,7 @@ impl DataHandle {
 }
 
 fn io_error(err: BusError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, err)
+    io::Error::other(err)
 }
 
 impl Read for DataHandle {

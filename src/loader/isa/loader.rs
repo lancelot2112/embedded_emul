@@ -5,11 +5,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::loader::isa::parse_str;
-use crate::soc::isa::ast::{IncludeDecl, IsaSpecification, IsaItem};
+use crate::soc::isa::ast::{IncludeDecl, IsaItem, IsaSpecification};
 use crate::soc::isa::error::IsaError;
 use crate::soc::isa::machine::MachineDescription;
 use crate::soc::isa::validator::Validator;
 
+#[derive(Default)]
 pub struct IsaLoader {
     visited: BTreeSet<PathBuf>,
     stack: Vec<PathBuf>,
@@ -17,10 +18,7 @@ pub struct IsaLoader {
 
 impl IsaLoader {
     pub fn new() -> Self {
-        Self {
-            visited: BTreeSet::new(),
-            stack: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn load_machine<P: AsRef<Path>>(

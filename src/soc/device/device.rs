@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn trait_helpers_propagate_device_errors() {
-        let dev = FaultyDevice::default();
+        let dev = FaultyDevice;
         assert!(
             dev.read_u8(0).is_err(),
             "read_u8 should surface backend errors"

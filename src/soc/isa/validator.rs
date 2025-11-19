@@ -3,8 +3,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ast::{
-    ContextReference, FieldDecl, FormDecl, InstructionDecl, IsaSpecification, IsaItem, MaskSelector,
-    SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember, SpaceMemberDecl,
+    ContextReference, FieldDecl, FormDecl, InstructionDecl, IsaItem, IsaSpecification,
+    MaskSelector, SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember, SpaceMemberDecl,
 };
 use super::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
 use super::error::IsaError;
@@ -13,6 +13,7 @@ use super::machine::MachineDescription;
 use super::register::FieldRegistrationError;
 use super::space::{SpaceState, resolve_reference_path};
 
+#[derive(Default)]
 pub struct Validator {
     seen_spaces: BTreeSet<String>,
     parameters: BTreeMap<String, String>,
@@ -24,14 +25,7 @@ pub struct Validator {
 
 impl Validator {
     pub fn new() -> Self {
-        Self {
-            seen_spaces: BTreeSet::new(),
-            parameters: BTreeMap::new(),
-            space_states: BTreeMap::new(),
-            logic_states: BTreeMap::new(),
-            space_kinds: BTreeMap::new(),
-            diagnostics: Vec::new(),
-        }
+        Self::default()
     }
 
     pub fn validate(&mut self, docs: &[IsaSpecification]) -> Result<(), IsaError> {
@@ -58,7 +52,10 @@ impl Validator {
         }
     }
 
-    pub fn finalize_machine(&self, docs: Vec<IsaSpecification>) -> Result<MachineDescription, IsaError> {
+    pub fn finalize_machine(
+        &self,
+        docs: Vec<IsaSpecification>,
+    ) -> Result<MachineDescription, IsaError> {
         MachineDescription::from_documents(docs)
     }
 
@@ -86,9 +83,7 @@ impl Validator {
                 );
             }
         }
-        self.space_states
-            .entry(space.name.clone())
-            .or_insert_with(SpaceState::new);
+        self.space_states.entry(space.name.clone()).or_default();
     }
 
     fn validate_space_member(&mut self, member: &SpaceMemberDecl) {
@@ -229,10 +224,10 @@ impl Validator {
         let mut unknown_fields = Vec::new();
         if let Some(mask) = &instr.mask {
             for field in &mask.fields {
-                if let MaskSelector::Field(name) = &field.selector {
-                    if !form_info.subfields.contains_key(name) {
-                        unknown_fields.push(name.clone());
-                    }
+                if let MaskSelector::Field(name) = &field.selector
+                    && !form_info.subfields.contains_key(name)
+                {
+                    unknown_fields.push(name.clone());
                 }
             }
         }
@@ -342,7 +337,7 @@ impl Validator {
             );
             return;
         };
-        if let Some(subfield_name) = path.get(0) {
+        if let Some(subfield_name) = path.first() {
             if !field_info.has_subfield(subfield_name) {
                 self.push_validation_diagnostic(
                     "validation.redirect.unknown-subfield",
@@ -361,7 +356,7 @@ impl Validator {
                     Some(field.span.clone()),
                 );
             }
-        } else if path.len() > 0 {
+        } else if !path.is_empty() {
             self.push_validation_diagnostic(
                 "validation.redirect.depth",
                 "redirect context depth exceeds field::subfield",
@@ -383,7 +378,7 @@ mod tests {
     use super::*;
     use crate::loader::isa::parse_str;
     use crate::soc::isa::ast::{
-        FormDecl, InstructionDecl, IsaSpecification, IsaItem, SpaceAttribute, SpaceDecl, SpaceKind,
+        FormDecl, InstructionDecl, IsaItem, IsaSpecification, SpaceAttribute, SpaceDecl, SpaceKind,
         SpaceMember, SpaceMemberDecl, SubFieldDecl,
     };
     use crate::soc::isa::diagnostic::{DiagnosticPhase, SourcePosition, SourceSpan};

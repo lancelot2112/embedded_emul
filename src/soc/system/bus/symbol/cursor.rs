@@ -25,8 +25,8 @@ pub struct SymbolWalkRead {
 
 impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
     /// Returns the next primitive value in declaration order along with its formatted path.
-    pub fn next(&mut self) -> Result<Option<SymbolWalkRead>, SymbolAccessError> {
-        while let Some(entry) = self.walker.next() {
+    pub fn try_next(&mut self) -> Result<Option<SymbolWalkRead>, SymbolAccessError> {
+        for entry in &mut self.walker {
             if entry.offset_bits % 8 != 0 {
                 let is_bitfield = matches!(
                     self.arena.get(entry.ty),
@@ -36,14 +36,13 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
                     continue;
                 }
             }
-            let mut address = self.snapshot.address + (entry.offset_bits / 8) as u64;
+            let mut address = self.snapshot.address + (entry.offset_bits / 8);
             if let crate::soc::prog::types::record::TypeRecord::BitField(bitfield) =
                 self.arena.get(entry.ty)
+                && let Some((min_offset, _)) = bitfield.bit_span()
             {
-                if let Some((min_offset, _)) = bitfield.bit_span() {
-                    let total_bits = entry.offset_bits + min_offset as u64;
-                    address = self.snapshot.address + (total_bits / 8) as u64;
-                }
+                let total_bits = entry.offset_bits + min_offset as u64;
+                address = self.snapshot.address + (total_bits / 8);
             }
             let value = self.read_entry_value(&entry, address)?;
             return Ok(Some(SymbolWalkRead {
@@ -98,7 +97,7 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
                 )),
             }));
         }
-        let address = self.snapshot.address + (entry.offset_bits / 8) as u64;
+        let address = self.snapshot.address + (entry.offset_bits / 8);
         self.handle.data.address_mut().jump(address)?;
         self.handle.data.write_bytes(data)?;
         Ok(())

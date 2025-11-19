@@ -97,30 +97,30 @@ impl<'a> Iterator for SymbolQueryIter<'a> {
 
 impl<'a> SymbolQueryIter<'a> {
     fn matches(&self, record: &SymbolRecord) -> bool {
-        if let Some(binding) = self.binding {
-            if record.binding != binding {
-                return false;
-            }
+        if let Some(binding) = self.binding
+            && record.binding != binding
+        {
+            return false;
         }
-        if let Some(label) = self.label {
-            if record.label != label {
-                return false;
-            }
+        if let Some(label) = self.label
+            && record.label != label
+        {
+            return false;
         }
-        if let Some(source) = self.source {
-            if !record.provenance.sources.contains(source) {
-                return false;
-            }
+        if let Some(source) = self.source
+            && !record.provenance.sources.contains(source)
+        {
+            return false;
         }
-        if let Some(addr) = self.runtime_addr {
-            if record.runtime_addr != Some(addr) {
-                return false;
-            }
+        if let Some(addr) = self.runtime_addr
+            && record.runtime_addr != Some(addr)
+        {
+            return false;
         }
-        if let Some(addr) = self.file_addr {
-            if record.file_addr != Some(addr) {
-                return false;
-            }
+        if let Some(addr) = self.file_addr
+            && record.file_addr != Some(addr)
+        {
+            return false;
         }
         true
     }

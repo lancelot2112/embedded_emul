@@ -31,6 +31,10 @@ impl BusRange {
     pub fn len(&self) -> u64 {
         self.bus_end - self.bus_start
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.bus_start == self.bus_end
+    }
 }
 
 #[derive(Clone)]
@@ -46,6 +50,10 @@ pub struct ResolvedRange {
 impl ResolvedRange {
     pub fn len(&self) -> u64 {
         self.bus_end - self.bus_start
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bus_start == self.bus_end
     }
 
     pub fn contains(&self, addr: u64) -> bool {

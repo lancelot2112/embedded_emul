@@ -34,9 +34,7 @@ pub struct ExprProgram {
 
 impl ExprProgram {
     pub fn new() -> Self {
-        Self {
-            ops: SmallVec::new(),
-        }
+        Self::default()
     }
 
     pub fn push(&mut self, op: OpCode) {
@@ -69,6 +67,14 @@ impl ExprProgram {
             }
         }
         stack.pop().unwrap_or(0)
+    }
+}
+
+impl Default for ExprProgram {
+    fn default() -> Self {
+        Self {
+            ops: SmallVec::new(),
+        }
     }
 }
 

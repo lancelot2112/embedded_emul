@@ -138,7 +138,7 @@ fn pointer_deref_reads_target_value() {
 
     let mut symbol_handle = SymbolHandle::new(&table, bus);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
-    let entry = cursor.next().expect("pointer entry").expect("value");
+    let entry = cursor.try_next().expect("pointer entry").expect("value");
     assert!(
         matches!(entry.entry.kind, ValueKind::Pointer { .. }),
         "walker should report pointer kind"
@@ -185,7 +185,7 @@ fn walker_iterates_structured_arrays() {
     let mut symbol_handle = SymbolHandle::new(&table, bus);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
     let mut seen = Vec::new();
-    while let Some(value) = cursor.next().expect("next") {
+    while let Some(value) = cursor.try_next().expect("next") {
         seen.push(value);
     }
     let paths: Vec<String> = seen
@@ -250,7 +250,7 @@ fn mixed_data_and_bitfield_values() {
     let mut symbol_handle = SymbolHandle::new(&table, bus);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
 
-    let first = cursor.next().expect("header step").expect("value");
+    let first = cursor.try_next().expect("header step").expect("value");
     assert_eq!(first.entry.path.to_string(arena.as_ref()), "header");
     assert_eq!(
         first.value,
@@ -258,7 +258,7 @@ fn mixed_data_and_bitfield_values() {
         "scalar should decode directly"
     );
 
-    let second = cursor.next().expect("flags step").expect("value");
+    let second = cursor.try_next().expect("flags step").expect("value");
     assert_eq!(second.entry.path.to_string(arena.as_ref()), "flags");
     assert_eq!(
         second.value,
@@ -266,7 +266,7 @@ fn mixed_data_and_bitfield_values() {
         "bitfield bytes should round-trip"
     );
 
-    let third = cursor.next().expect("tail step").expect("value");
+    let third = cursor.try_next().expect("tail step").expect("value");
     assert_eq!(third.entry.path.to_string(arena.as_ref()), "tail");
     assert_eq!(
         third.value,
@@ -275,7 +275,7 @@ fn mixed_data_and_bitfield_values() {
     );
 
     assert!(
-        cursor.next().unwrap().is_none(),
+        cursor.try_next().unwrap().is_none(),
         "cursor should exhaust after three members"
     );
 }
@@ -326,7 +326,7 @@ fn bitfield_members_read_individually() {
     let mut symbol_handle = SymbolHandle::new(&table, bus);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
     let mut seen = Vec::new();
-    while let Some(step) = cursor.next().expect("cursor step") {
+    while let Some(step) = cursor.try_next().expect("cursor step") {
         seen.push((step.entry.path.to_string(arena.as_ref()), step.value));
     }
 
@@ -381,7 +381,7 @@ fn bitfield_sign_extension_honors_pad() {
 
     let mut symbol_handle = SymbolHandle::new(&table, bus);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
-    let value = cursor.next().expect("bitfield entry").expect("value");
+    let value = cursor.try_next().expect("bitfield entry").expect("value");
     assert_eq!(value.entry.path.to_string(arena.as_ref()), "field");
     assert_eq!(
         value.value,
@@ -439,7 +439,7 @@ fn union_members_overlay_same_bytes() {
     let mut symbol_handle = SymbolHandle::new(&table, bus);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
 
-    let first = cursor.next().expect("as_u32 step").expect("value");
+    let first = cursor.try_next().expect("as_u32 step").expect("value");
     assert_eq!(first.entry.path.to_string(arena.as_ref()), "payload.as_u32");
     assert_eq!(
         first.value,
@@ -447,7 +447,7 @@ fn union_members_overlay_same_bytes() {
         "raw bytes should decode as u32"
     );
 
-    let second = cursor.next().expect("as_f32 step").expect("value");
+    let second = cursor.try_next().expect("as_f32 step").expect("value");
     assert_eq!(
         second.entry.path.to_string(arena.as_ref()),
         "payload.as_f32"
@@ -463,7 +463,7 @@ fn union_members_overlay_same_bytes() {
     );
 
     assert!(
-        cursor.next().unwrap().is_none(),
+        cursor.try_next().unwrap().is_none(),
         "union member list should be exhausted"
     );
 }
