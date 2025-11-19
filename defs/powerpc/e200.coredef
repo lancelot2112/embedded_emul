@@ -1,0 +1,2 @@
+:include ppc_eref2.isa
+:include ppc_vle.isaext
