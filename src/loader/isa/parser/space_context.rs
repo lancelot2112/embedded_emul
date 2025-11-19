@@ -1,6 +1,6 @@
 use crate::soc::isa::ast::{
-    ContextReference, FieldDecl, FieldIndexRange, IsaItem, SpaceKind, SpaceMember, SpaceMemberDecl,
-    SubFieldDecl, SubFieldOp,
+    ContextReference, FieldDecl, FieldIndexRange, FormDecl, InstructionDecl, IsaItem, MaskField,
+    MaskSelector, MaskSpec, SpaceKind, SpaceMember, SpaceMemberDecl, SubFieldDecl, SubFieldOp,
 };
 use crate::soc::isa::error::IsaError;
 use crate::soc::prog::types::parse_u64_literal;
@@ -13,11 +13,219 @@ pub(super) fn parse_space_context_directive(
     kind: SpaceKind,
 ) -> Result<IsaItem, IsaError> {
     match kind {
-        SpaceKind::Logic => Err(IsaError::Parser(format!(
-            "logic space :{space} contexts are not supported yet"
-        ))),
+        SpaceKind::Logic => parse_logic_context_directive(parser, space),
         _ => parse_register_form(parser, space),
     }
+}
+
+fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<IsaItem, IsaError> {
+    let mut qualifier = None;
+    if parser.check(TokenKind::DoubleColon)? {
+        parser.consume()?;
+        qualifier = Some(parser.expect_identifier("logic context qualifier")?);
+    }
+
+    let name_token = parser.expect_identifier_token("form or instruction name")?;
+    let name = name_token.lexeme.clone();
+    let operands = if parser.check(TokenKind::LParen)? {
+        parse_operand_list(parser)?
+    } else {
+        Vec::new()
+    };
+
+    let mut description: Option<String> = None;
+    let mut mask: Option<MaskSpec> = None;
+    let mut subfields: Option<Vec<SubFieldDecl>> = None;
+    let mut seen_semantics = false;
+
+    while !parser.check(TokenKind::EOF)? && !parser.check(TokenKind::Colon)? {
+        let attr_token = parser.expect_identifier_token("logic attribute name")?;
+        let attr_name = attr_token.lexeme.to_ascii_lowercase();
+        parser.expect(TokenKind::Equals, "'=' after logic attribute name")?;
+        match attr_name.as_str() {
+            "descr" => {
+                if description.is_some() {
+                    return Err(IsaError::Parser(format!(
+                        "duplicate descr attribute for '{name}'"
+                    )));
+                }
+                let value = parser.expect(TokenKind::String, "string literal for descr")?;
+                description = Some(value.lexeme);
+            }
+            "mask" => {
+                if mask.is_some() {
+                    return Err(IsaError::Parser(format!(
+                        "duplicate mask attribute for instruction '{name}'"
+                    )));
+                }
+                mask = Some(parse_mask_block(parser)?);
+            }
+            "subfields" => {
+                if subfields.is_some() {
+                    return Err(IsaError::Parser(format!(
+                        "duplicate subfields block for '{name}'"
+                    )));
+                }
+                subfields = Some(parse_subfields_block(parser)?);
+            }
+            "semantics" => {
+                skip_braced_block(parser, "semantics block")?;
+                seen_semantics = true;
+            }
+            other => {
+                return Err(IsaError::Parser(format!(
+                    "unknown logic attribute '{other}'"
+                )));
+            }
+        }
+    }
+
+    let end_token = parser
+        .last_consumed_token()
+        .cloned()
+        .unwrap_or_else(|| name_token.clone());
+    let span = span_from_tokens(parser.file_path(), &name_token, &end_token);
+
+    if qualifier.is_none() && subfields.is_none() {
+        return Err(IsaError::Parser(format!(
+            "form '{name}' must declare a subfields block"
+        )));
+    }
+
+    if let Some(subfields) = subfields {
+        if !operands.is_empty() {
+            return Err(IsaError::Parser(format!(
+                "forms cannot declare operand lists (found before '{name}')"
+            )));
+        }
+        if mask.is_some() {
+            return Err(IsaError::Parser(format!(
+                "forms cannot declare mask attributes ('{name}')"
+            )));
+        }
+        if seen_semantics {
+            return Err(IsaError::Parser(format!(
+                "forms cannot declare semantics blocks ('{name}')"
+            )));
+        }
+        let form = FormDecl {
+            space: space.to_string(),
+            name,
+            parent: qualifier,
+            description: description.clone(),
+            subfields,
+            span,
+        };
+        return Ok(IsaItem::SpaceMember(SpaceMemberDecl {
+            space: space.to_string(),
+            member: SpaceMember::Form(form),
+        }));
+    }
+
+    if qualifier.is_none() {
+        return Err(IsaError::Parser(format!(
+            "logic instruction '{name}' must specify a form using '::FormName'"
+        )));
+    }
+
+    let instruction = InstructionDecl {
+        space: space.to_string(),
+        form: qualifier,
+        name,
+        description,
+        operands,
+        mask,
+        encoding: None,
+        semantics: None,
+        span,
+    };
+    Ok(IsaItem::SpaceMember(SpaceMemberDecl {
+        space: space.to_string(),
+        member: SpaceMember::Instruction(instruction),
+    }))
+}
+
+fn parse_operand_list(parser: &mut Parser) -> Result<Vec<String>, IsaError> {
+    parser.expect(TokenKind::LParen, "'(' to start operand list")?;
+    let mut operands = Vec::new();
+    loop {
+        if parser.check(TokenKind::RParen)? {
+            parser.consume()?;
+            break;
+        }
+        let name = parser.expect_identifier("operand name")?;
+        operands.push(name);
+        if parser.check(TokenKind::Comma)? {
+            parser.consume()?;
+        } else {
+            parser.expect(TokenKind::RParen, "')' to close operand list")?;
+            break;
+        }
+    }
+    Ok(operands)
+}
+
+fn parse_mask_block(parser: &mut Parser) -> Result<MaskSpec, IsaError> {
+    parser.expect(TokenKind::LBrace, "'{' to start mask block")?;
+    let mut fields = Vec::new();
+    loop {
+        if parser.check(TokenKind::RBrace)? {
+            parser.consume()?;
+            break;
+        }
+        if parser.check(TokenKind::Comma)? {
+            parser.consume()?;
+            continue;
+        }
+        let selector = parse_mask_selector(parser)?;
+        parser.expect(TokenKind::Equals, "'=' after mask field name")?;
+        let value = parser.expect(TokenKind::Number, "numeric literal for mask value")?;
+        let parsed = parse_u64_literal(&value.lexeme).map_err(|err| {
+            IsaError::Parser(format!("invalid mask literal '{}': {err}", value.lexeme))
+        })?;
+        fields.push(MaskField {
+            selector,
+            value: parsed,
+        });
+        if parser.check(TokenKind::Comma)? {
+            parser.consume()?;
+        }
+    }
+    if fields.is_empty() {
+        return Err(IsaError::Parser(
+            "mask block must contain at least one field".into(),
+        ));
+    }
+    Ok(MaskSpec { fields })
+}
+
+fn parse_mask_selector(parser: &mut Parser) -> Result<MaskSelector, IsaError> {
+    if parser.check(TokenKind::BitExpr)? {
+        let token = parser.consume()?;
+        Ok(MaskSelector::BitExpr(token.lexeme))
+    } else {
+        let token = parser.expect_identifier_token("mask field name")?;
+        Ok(MaskSelector::Field(token.lexeme))
+    }
+}
+
+fn skip_braced_block(parser: &mut Parser, context: &str) -> Result<(), IsaError> {
+    parser.expect(TokenKind::LBrace, &format!("'{{' to start {context}"))?;
+    let mut depth = 1;
+    while depth > 0 {
+        let token = parser.consume()?;
+        match token.kind {
+            TokenKind::LBrace => depth += 1,
+            TokenKind::RBrace => depth -= 1,
+            TokenKind::EOF => {
+                return Err(IsaError::Parser(format!(
+                    "unterminated {context}; missing closing '}}'"
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
 }
 
 fn parse_register_form(parser: &mut Parser, space: &str) -> Result<IsaItem, IsaError> {
@@ -347,12 +555,32 @@ mod tests {
 
     #[test]
     fn rejects_logic_space_contexts() {
-        let err = parse_str(
-            PathBuf::from("test.isa"),
-            ":space logic addr=32 word=32 type=logic\n:logic FORM subfields={\n    OPCD @(0..5)\n}",
-        )
-        .unwrap_err();
-        expect_parser_diag(err, "logic space");
+        let doc = parse(
+            ":space logic addr=32 word=32 type=logic\n:logic FORM subfields={\n    OPCD @(0..5)\n}\n:logic::FORM add mask={OPCD=31}",
+        );
+        assert_eq!(doc.items.len(), 3);
+        match &doc.items[1] {
+            IsaItem::SpaceMember(member) => match &member.member {
+                SpaceMember::Form(form) => {
+                    assert_eq!(form.name, "FORM");
+                    assert!(form.parent.is_none());
+                }
+                other => panic!("expected form, got {other:?}"),
+            },
+            other => panic!("unexpected item: {other:?}"),
+        }
+        match &doc.items[2] {
+            IsaItem::SpaceMember(member) => match &member.member {
+                SpaceMember::Instruction(instr) => {
+                    assert_eq!(instr.name, "add");
+                    assert_eq!(instr.form.as_deref(), Some("FORM"));
+                    let mask = instr.mask.as_ref().expect("mask parsed");
+                    assert_eq!(mask.fields.len(), 1);
+                }
+                other => panic!("unexpected member: {other:?}"),
+            },
+            other => panic!("unexpected item: {other:?}"),
+        }
     }
 
     #[test]

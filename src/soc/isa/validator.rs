@@ -3,10 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ast::{
-    ContextReference, FieldDecl, IsaDocument, IsaItem, SpaceDecl, SpaceMember, SpaceMemberDecl,
+    ContextReference, FieldDecl, FormDecl, InstructionDecl, IsaDocument, IsaItem, MaskSelector,
+    SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember, SpaceMemberDecl,
 };
 use super::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
 use super::error::IsaError;
+use super::logic::{LogicFormError, LogicSpaceState};
 use super::machine::MachineDescription;
 use super::register::FieldRegistrationError;
 use super::space::{SpaceState, resolve_reference_path};
@@ -15,6 +17,8 @@ pub struct Validator {
     seen_spaces: BTreeSet<String>,
     parameters: BTreeMap<String, String>,
     space_states: BTreeMap<String, SpaceState>,
+    logic_states: BTreeMap<String, LogicSpaceState>,
+    space_kinds: BTreeMap<String, SpaceKind>,
     diagnostics: Vec<IsaDiagnostic>,
 }
 
@@ -24,6 +28,8 @@ impl Validator {
             seen_spaces: BTreeSet::new(),
             parameters: BTreeMap::new(),
             space_states: BTreeMap::new(),
+            logic_states: BTreeMap::new(),
+            space_kinds: BTreeMap::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -65,14 +71,180 @@ impl Validator {
             );
             return;
         }
+        self.space_kinds
+            .insert(space.name.clone(), space.kind.clone());
+        if matches!(space.kind, SpaceKind::Logic) {
+            if let Some(word) = logic_word_size(space) {
+                self.logic_states
+                    .entry(space.name.clone())
+                    .or_insert_with(|| LogicSpaceState::new(word));
+            } else {
+                self.push_validation_diagnostic(
+                    "validation.logic.word-size",
+                    format!("logic space '{}' missing word size", space.name),
+                    Some(space.span.clone()),
+                );
+            }
+        }
         self.space_states
             .entry(space.name.clone())
             .or_insert_with(SpaceState::new);
     }
 
     fn validate_space_member(&mut self, member: &SpaceMemberDecl) {
-        if let SpaceMember::Field(field) = &member.member {
-            self.validate_field(field);
+        match &member.member {
+            SpaceMember::Field(field) => self.validate_field(field),
+            SpaceMember::Form(form) => self.validate_form(form),
+            SpaceMember::Instruction(instr) => self.validate_instruction(instr),
+        }
+    }
+
+    fn validate_form(&mut self, form: &FormDecl) {
+        match self.space_kinds.get(&form.space) {
+            Some(SpaceKind::Logic) => {}
+            Some(_) => {
+                self.push_validation_diagnostic(
+                    "validation.logic.form-space",
+                    format!(
+                        "form '{}' can only be declared inside logic spaces",
+                        form.name
+                    ),
+                    Some(form.span.clone()),
+                );
+                return;
+            }
+            None => {
+                self.push_validation_diagnostic(
+                    "validation.logic.form-space",
+                    format!(
+                        "form '{}' declared in unknown space '{}'",
+                        form.name, form.space
+                    ),
+                    Some(form.span.clone()),
+                );
+                return;
+            }
+        }
+
+        let Some(state) = self.logic_state(&form.space) else {
+            self.push_validation_diagnostic(
+                "validation.logic.form-space",
+                format!("logic space '{}' has no state", form.space),
+                Some(form.span.clone()),
+            );
+            return;
+        };
+
+        match state.register_form(form) {
+            Ok(()) => {}
+            Err(LogicFormError::DuplicateForm { name }) => self.push_validation_diagnostic(
+                "validation.logic.form-duplicate",
+                format!("form '{}' declared multiple times", name),
+                Some(form.span.clone()),
+            ),
+            Err(LogicFormError::MissingSubfields { name }) => self.push_validation_diagnostic(
+                "validation.logic.form-empty",
+                format!("form '{}' must declare at least one subfield", name),
+                Some(form.span.clone()),
+            ),
+            Err(LogicFormError::MissingParent { parent }) => self.push_validation_diagnostic(
+                "validation.logic.form-parent",
+                format!(
+                    "parent form '{}' must be declared before it can be extended",
+                    parent
+                ),
+                Some(form.span.clone()),
+            ),
+            Err(LogicFormError::DuplicateSubfield { name }) => self.push_validation_diagnostic(
+                "validation.logic.form-subfield-duplicate",
+                format!(
+                    "subfield '{}' already exists on inherited form; duplicates not allowed",
+                    name
+                ),
+                Some(form.span.clone()),
+            ),
+        }
+    }
+
+    fn validate_instruction(&mut self, instr: &InstructionDecl) {
+        match self.space_kinds.get(&instr.space) {
+            Some(SpaceKind::Logic) => {}
+            Some(_) => {
+                self.push_validation_diagnostic(
+                    "validation.logic.instruction-space",
+                    format!(
+                        "instruction '{}' can only be declared inside logic spaces",
+                        instr.name
+                    ),
+                    Some(instr.span.clone()),
+                );
+                return;
+            }
+            None => {
+                self.push_validation_diagnostic(
+                    "validation.logic.instruction-space",
+                    format!(
+                        "instruction '{}' declared in unknown space '{}'",
+                        instr.name, instr.space
+                    ),
+                    Some(instr.span.clone()),
+                );
+                return;
+            }
+        }
+
+        let Some(state) = self.logic_states.get(&instr.space) else {
+            self.push_validation_diagnostic(
+                "validation.logic.instruction-space",
+                format!("logic space '{}' has no form state", instr.space),
+                Some(instr.span.clone()),
+            );
+            return;
+        };
+
+        let Some(form_name) = &instr.form else {
+            self.push_validation_diagnostic(
+                "validation.logic.instruction-form-missing",
+                format!(
+                    "instruction '{}' must reference a form using '::<form>'",
+                    instr.name
+                ),
+                Some(instr.span.clone()),
+            );
+            return;
+        };
+
+        let Some(form_info) = state.form(form_name) else {
+            self.push_validation_diagnostic(
+                "validation.logic.instruction-form",
+                format!(
+                    "instruction '{}' references undefined form '{}'",
+                    instr.name, form_name
+                ),
+                Some(instr.span.clone()),
+            );
+            return;
+        };
+
+        let mut unknown_fields = Vec::new();
+        if let Some(mask) = &instr.mask {
+            for field in &mask.fields {
+                if let MaskSelector::Field(name) = &field.selector {
+                    if !form_info.subfields.contains_key(name) {
+                        unknown_fields.push(name.clone());
+                    }
+                }
+            }
+        }
+        for name in unknown_fields {
+            self.push_validation_diagnostic(
+                "validation.logic.mask-field",
+                format!(
+                    "mask references unknown field '{}' for instruction '{}'",
+                    name, instr.name
+                ),
+                Some(instr.span.clone()),
+            );
         }
     }
 
@@ -136,6 +308,10 @@ impl Validator {
             span,
         ));
     }
+
+    fn logic_state(&mut self, space: &str) -> Option<&mut LogicSpaceState> {
+        self.logic_states.get_mut(space)
+    }
     fn ensure_redirect_target_defined(&mut self, field: &FieldDecl, reference: &ContextReference) {
         let (target_space, mut path) = resolve_reference_path(&field.space, reference);
         if path.is_empty() {
@@ -193,6 +369,13 @@ impl Validator {
             );
         }
     }
+}
+
+fn logic_word_size(space: &SpaceDecl) -> Option<u32> {
+    space.attributes.iter().find_map(|attr| match attr {
+        SpaceAttribute::WordSize(bits) => Some(*bits),
+        _ => None,
+    })
 }
 
 #[cfg(test)]
@@ -312,5 +495,32 @@ mod tests {
         )
         .unwrap_err();
         expect_validation_diag(err, "cannot append subfields to undefined field");
+    }
+
+    #[test]
+    fn logic_form_requires_parent() {
+        let err = validate_src(
+            ":space logic addr=32 word=32 type=logic\n:logic::UNKNOWN child subfields={\n    OPCD @(0..5)\n}",
+        )
+        .unwrap_err();
+        expect_validation_diag(err, "parent form 'UNKNOWN'");
+    }
+
+    #[test]
+    fn logic_instruction_requires_existing_form() {
+        let err = validate_src(
+            ":space logic addr=32 word=32 type=logic\n:logic FORM subfields={\n    OPCD @(0..5)\n}\n:logic::UNKNOWN add mask={OPCD=31}",
+        )
+        .unwrap_err();
+        expect_validation_diag(err, "references undefined form");
+    }
+
+    #[test]
+    fn logic_mask_requires_known_field() {
+        let err = validate_src(
+            ":space logic addr=32 word=32 type=logic\n:logic FORM subfields={\n    OPCD @(0..5)\n}\n:logic::FORM add mask={XYZ=1}",
+        )
+        .unwrap_err();
+        expect_validation_diag(err, "mask references unknown field");
     }
 }

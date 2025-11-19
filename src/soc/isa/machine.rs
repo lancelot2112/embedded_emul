@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::soc::prog::types::bitfield::BitFieldSpec;
 
-use super::ast::{InstructionDecl, IsaDocument, IsaItem};
+use super::ast::{InstructionDecl, IsaDocument, IsaItem, SpaceMember};
 use super::error::IsaError;
 use super::semantics::SemanticBlock;
 
@@ -26,8 +26,16 @@ impl MachineDescription {
         let mut machine = MachineDescription::new();
         for doc in docs {
             for item in doc.items {
-                if let IsaItem::Instruction(instr) = item {
-                    machine.instructions.push(Instruction::from_decl(instr));
+                match item {
+                    IsaItem::Instruction(instr) => {
+                        machine.instructions.push(Instruction::from_decl(instr));
+                    }
+                    IsaItem::SpaceMember(member) => {
+                        if let SpaceMember::Instruction(instr) = member.member {
+                            machine.instructions.push(Instruction::from_decl(instr));
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -47,7 +55,11 @@ pub struct SpaceInfo {
 
 #[derive(Debug, Clone)]
 pub struct Instruction {
+    pub space: String,
     pub name: String,
+    pub form: Option<String>,
+    pub description: Option<String>,
+    pub operands: Vec<String>,
     pub mask: Option<InstructionMask>,
     pub encoding: Option<BitFieldSpec>,
     pub semantics: Option<SemanticBlock>,
@@ -56,7 +68,11 @@ pub struct Instruction {
 impl Instruction {
     pub fn from_decl(decl: InstructionDecl) -> Self {
         Self {
+            space: decl.space,
             name: decl.name,
+            form: decl.form,
+            description: decl.description,
+            operands: decl.operands,
             mask: decl.mask.map(|mask| InstructionMask {
                 fields: mask.fields,
             }),

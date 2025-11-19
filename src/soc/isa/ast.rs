@@ -77,6 +77,7 @@ pub enum SpaceAttribute {
 #[derive(Debug, Clone)]
 pub enum SpaceMember {
     Field(FieldDecl),
+    Form(FormDecl),
     Instruction(InstructionDecl),
 }
 
@@ -90,6 +91,16 @@ pub struct FieldDecl {
     pub reset: Option<u64>,
     pub description: Option<String>,
     pub redirect: Option<ContextReference>,
+    pub subfields: Vec<SubFieldDecl>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct FormDecl {
+    pub space: String,
+    pub name: String,
+    pub parent: Option<String>,
+    pub description: Option<String>,
     pub subfields: Vec<SubFieldDecl>,
     pub span: SourceSpan,
 }
@@ -124,10 +135,12 @@ pub struct InstructionDecl {
     pub space: String,
     pub form: Option<String>,
     pub name: String,
+    pub description: Option<String>,
     pub operands: Vec<String>,
     pub mask: Option<MaskSpec>,
     pub encoding: Option<BitFieldSpec>,
     pub semantics: Option<SemanticBlock>,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -136,10 +149,15 @@ pub struct MaskSpec {
 }
 
 #[derive(Debug, Clone)]
+pub enum MaskSelector {
+    Field(String),
+    BitExpr(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct MaskField {
-    pub name: String,
+    pub selector: MaskSelector,
     pub value: u64,
-    pub width: u8,
 }
 
 #[derive(Debug, Clone)]

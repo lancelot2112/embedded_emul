@@ -8,6 +8,7 @@ pub mod ast;
 pub mod diagnostic;
 pub mod error;
 pub mod handle;
+mod logic;
 pub mod machine;
 mod register;
 pub mod semantics;
