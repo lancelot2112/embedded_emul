@@ -3,6 +3,7 @@ use crate::soc::isa::ast::{
     MaskSelector, MaskSpec, SpaceKind, SpaceMember, SpaceMemberDecl, SubFieldDecl, SubFieldOp,
 };
 use crate::soc::isa::error::IsaError;
+use crate::soc::isa::semantics::SemanticBlock;
 use crate::soc::prog::types::parse_u64_literal;
 
 use super::{Parser, Token, TokenKind, spans::span_from_tokens};
@@ -36,7 +37,7 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
     let mut description: Option<String> = None;
     let mut mask: Option<MaskSpec> = None;
     let mut subfields: Option<Vec<SubFieldDecl>> = None;
-    let mut seen_semantics = false;
+    let mut semantics: Option<SemanticBlock> = None;
     let mut display: Option<String> = None;
     let mut operator: Option<String> = None;
 
@@ -71,8 +72,13 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
                 subfields = Some(parse_subfields_block(parser)?);
             }
             "semantics" => {
-                skip_braced_block(parser, "semantics block")?;
-                seen_semantics = true;
+                if semantics.is_some() {
+                    return Err(IsaError::Parser(format!(
+                        "duplicate semantics block for instruction '{name}'"
+                    )));
+                }
+                let block = parser.parse_semantic_block("semantics block")?;
+                semantics = Some(block);
             }
             "disp" => {
                 if display.is_some() {
@@ -106,7 +112,7 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
         .unwrap_or_else(|| name_token.clone());
     let span = span_from_tokens(parser.file_path(), &name_token, &end_token);
 
-    let has_instruction_attrs = mask.is_some() || seen_semantics || !operands.is_empty();
+    let has_instruction_attrs = mask.is_some() || semantics.is_some() || !operands.is_empty();
     if qualifier.is_none() && subfields.is_none() && !has_instruction_attrs {
         return Err(IsaError::Parser(format!(
             "form '{name}' must declare a subfields block"
@@ -124,7 +130,7 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
                 "forms cannot declare mask attributes ('{name}')"
             )));
         }
-        if seen_semantics {
+        if semantics.is_some() {
             return Err(IsaError::Parser(format!(
                 "forms cannot declare semantics blocks ('{name}')"
             )));
@@ -163,7 +169,7 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
         operands,
         mask,
         encoding: None,
-        semantics: None,
+        semantics,
         display,
         operator,
         span,
@@ -236,25 +242,6 @@ fn parse_mask_selector(parser: &mut Parser) -> Result<MaskSelector, IsaError> {
         let token = parser.expect_identifier_token("mask field name")?;
         Ok(MaskSelector::Field(token.lexeme))
     }
-}
-
-fn skip_braced_block(parser: &mut Parser, context: &str) -> Result<(), IsaError> {
-    parser.expect(TokenKind::LBrace, &format!("'{{' to start {context}"))?;
-    let mut depth = 1;
-    while depth > 0 {
-        let token = parser.consume()?;
-        match token.kind {
-            TokenKind::LBrace => depth += 1,
-            TokenKind::RBrace => depth -= 1,
-            TokenKind::EOF => {
-                return Err(IsaError::Parser(format!(
-                    "unterminated {context}; missing closing '}}'"
-                )));
-            }
-            _ => {}
-        }
-    }
-    Ok(())
 }
 
 fn parse_register_form(parser: &mut Parser, space: &str) -> Result<IsaItem, IsaError> {
@@ -665,6 +652,8 @@ mod tests {
         assert_eq!(instr.name, "add");
         assert_eq!(instr.form.as_deref(), Some("EXT"));
         assert_eq!(instr.operands, vec!["RT".to_string()]);
+        let semantics = instr.semantics.as_ref().expect("semantics parsed");
+        assert!(semantics.source.contains("result = RT"));
         let mask = instr.mask.as_ref().expect("mask parsed");
         assert_eq!(mask.fields.len(), 2);
         match &mask.fields[0].selector {

@@ -31,7 +31,9 @@ impl Instruction {
             operands: decl.operands,
             display: decl.display,
             operator: decl.operator,
-            mask: decl.mask.map(|mask| InstructionMask { fields: mask.fields }),
+            mask: decl.mask.map(|mask| InstructionMask {
+                fields: mask.fields,
+            }),
             encoding: decl.encoding,
             semantics: decl.semantics,
         }

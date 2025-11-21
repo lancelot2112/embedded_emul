@@ -124,7 +124,6 @@ impl IsaBuilder {
     pub fn build(self) -> IsaSpecification {
         IsaSpecification::new(self.path, self.items)
     }
-
 }
 
 /// Builder for the richer `InstructionDecl` structure.

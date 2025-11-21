@@ -4,8 +4,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::loader::isa::{parse_str_with_spaces};
-use crate::soc::isa::ast::{FieldDecl, IncludeDecl, IsaItem, IsaSpecification, SpaceDecl, SpaceKind, SpaceMember};
+use crate::loader::isa::parse_str_with_spaces;
+use crate::soc::isa::ast::{
+    FieldDecl, IncludeDecl, IsaItem, IsaSpecification, SpaceDecl, SpaceKind, SpaceMember,
+};
 use crate::soc::isa::error::IsaError;
 use crate::soc::isa::machine::MachineDescription;
 use crate::soc::isa::validator::Validator;
@@ -152,7 +154,8 @@ impl IsaLoader {
                 other => {
                     return Err(IsaError::Machine(format!(
                         "coredef '{}' includes unsupported file extension '.{}'",
-                        parent.display(), other
+                        parent.display(),
+                        other
                     )));
                 }
             }
@@ -229,11 +232,7 @@ impl CoreCompatibilityState {
         }
     }
 
-    fn check_extension(
-        &mut self,
-        coredef: &Path,
-        doc: &IsaSpecification,
-    ) -> Result<(), IsaError> {
+    fn check_extension(&mut self, coredef: &Path, doc: &IsaSpecification) -> Result<(), IsaError> {
         for item in &doc.items {
             if let IsaItem::Space(space) = item {
                 self.register_space(&space.name);
@@ -251,6 +250,7 @@ impl CoreCompatibilityState {
                     self.ensure_space_known(coredef, doc, &instr.space)?;
                 }
                 IsaItem::Space(_) | IsaItem::Parameter(_) | IsaItem::Include(_) => {}
+                IsaItem::Macro(_) => {}
             }
         }
         Ok(())
@@ -427,8 +427,7 @@ mod tests {
         let docs = loader
             .collect_documents(coredef.as_path())
             .expect("documents");
-        let err = IsaLoader::verify_coredef_compatibility(coredef.as_path(), &docs)
-            .unwrap_err();
+        let err = IsaLoader::verify_coredef_compatibility(coredef.as_path(), &docs).unwrap_err();
         assert!(matches!(
             err,
             IsaError::Machine(msg) if msg.contains("appends to undefined field")

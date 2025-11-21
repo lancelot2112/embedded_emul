@@ -39,10 +39,11 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
             let mut address = self.snapshot.address + (entry.offset_bits / 8);
             if let crate::soc::prog::types::record::TypeRecord::BitField(bitfield) =
                 self.arena.get(entry.ty)
-                && let Some((min_offset, _)) = bitfield.bit_span()
             {
-                let total_bits = entry.offset_bits + min_offset as u64;
-                address = self.snapshot.address + (total_bits / 8);
+                if let Some((min_offset, _)) = bitfield.bit_span() {
+                    let total_bits = entry.offset_bits + min_offset as u64;
+                    address = self.snapshot.address + (total_bits / 8);
+                }
             }
             let value = self.read_entry_value(&entry, address)?;
             return Ok(Some(SymbolWalkRead {

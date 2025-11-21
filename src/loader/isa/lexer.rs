@@ -15,6 +15,13 @@ pub struct Token {
     pub column: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct CapturedBlock {
+    pub body: String,
+    pub end_line: usize,
+    pub end_column: usize,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     Colon,
@@ -44,6 +51,7 @@ pub enum TokenKind {
     Caret,
     Ampersand,
     Asterisk,
+    Slash,
     Tilde,
     Backtick,
     Apostrophe,
@@ -135,13 +143,19 @@ impl<'src> Lexer<'src> {
             '^' => Ok(self.consume_single(TokenKind::Caret)),
             '&' => Ok(self.consume_single(TokenKind::Ampersand)),
             '*' => Ok(self.consume_single(TokenKind::Asterisk)),
+            '/' => {
+                if self.peek_next_char() == Some('/') {
+                    self.advance_char();
+                    self.advance_char();
+                    self.consume_line_comment();
+                    self.next_token()
+                } else {
+                    Ok(self.consume_single(TokenKind::Slash))
+                }
+            }
             '~' => Ok(self.consume_single(TokenKind::Tilde)),
             '`' => Ok(self.consume_single(TokenKind::Backtick)),
             '\'' => Ok(self.consume_single(TokenKind::Apostrophe)),
-            '#' => {
-                self.consume_line_comment();
-                self.next_token()
-            }
             '"' => self.consume_string(),
             ch if ch.is_ascii_digit() => self.consume_number(),
             ch if is_ident_start(ch) => self.consume_identifier(),
@@ -563,11 +577,13 @@ impl<'src> Lexer<'src> {
     fn skip_ignorable(&mut self) {
         loop {
             self.skip_whitespace();
-            if let Some('#') = self.peek_char() {
+            if self.peek_char() == Some('/') && self.peek_next_char() == Some('/') {
+                self.advance_char();
+                self.advance_char();
                 self.consume_line_comment();
-            } else {
-                break;
+                continue;
             }
+            break;
         }
     }
 
@@ -590,6 +606,39 @@ impl<'src> Lexer<'src> {
                 _ => return,
             }
         }
+    }
+
+    pub(super) fn capture_braced_block(&mut self) -> Result<CapturedBlock, IsaError> {
+        let mut depth = 1usize;
+        let mut body = String::new();
+        while let Some(ch) = self.peek_char() {
+            let (line, column) = self.position();
+            self.advance_char();
+            match ch {
+                '{' => {
+                    depth += 1;
+                    body.push(ch);
+                }
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(CapturedBlock {
+                            body,
+                            end_line: line,
+                            end_column: column,
+                        });
+                    }
+                    body.push(ch);
+                }
+                _ => body.push(ch),
+            }
+        }
+        Err(self.emit_lexer_diagnostic(
+            "lexer.block.unterminated",
+            "unterminated block; missing '}'",
+            self.line,
+            self.column + 1,
+        ))
     }
 
     fn peek_char(&self) -> Option<char> {
@@ -673,7 +722,7 @@ impl<'src> Lexer<'src> {
 }
 
 fn is_ident_start(ch: char) -> bool {
-    ch.is_ascii_alphabetic() || ch == '_' || ch == '$'
+    ch.is_ascii_alphabetic() || ch == '_' || ch == '$' || ch == '#'
 }
 
 fn is_ident_part(ch: char) -> bool {
@@ -811,6 +860,23 @@ mod tests {
         assert!(
             err.to_string().contains("unknown range size unit"),
             "unexpected error: {err:?}"
+        );
+    }
+
+    #[test]
+    fn treats_hash_prefixed_identifiers_as_tokens() {
+        let mut lexer = make_lexer("#RA");
+        let token = lexer.next_token().expect("identifier");
+        assert_eq!(token.kind, TokenKind::Identifier);
+        assert_eq!(token.lexeme, "#RA");
+    }
+
+    #[test]
+    fn skips_double_slash_comments() {
+        let stream = kinds("foo // comment\nbar");
+        assert_eq!(
+            stream,
+            vec![TokenKind::Identifier, TokenKind::Identifier, TokenKind::EOF]
         );
     }
 }

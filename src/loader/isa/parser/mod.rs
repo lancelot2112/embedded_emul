@@ -2,9 +2,9 @@
 
 mod directives;
 mod parameters;
+mod semantics;
 mod space;
 mod space_context;
-mod semantics;
 mod spans;
 mod specification;
 

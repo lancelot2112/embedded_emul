@@ -50,11 +50,7 @@ impl Validator {
         }
     }
 
-    fn ensure_redirect_target_defined(
-        &mut self,
-        field: &FieldDecl,
-        reference: &ContextReference,
-    ) {
+    fn ensure_redirect_target_defined(&mut self, field: &FieldDecl, reference: &ContextReference) {
         let (target_space, mut path) = resolve_reference_path(&field.space, reference);
         if path.is_empty() {
             self.push_validation_diagnostic(

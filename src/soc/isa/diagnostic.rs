@@ -81,7 +81,14 @@ impl IsaDiagnostic {
         let location = self
             .span
             .as_ref()
-            .map(|span| format!("{}:{}:{}", span.path.display(), span.start.line, span.start.column))
+            .map(|span| {
+                format!(
+                    "{}:{}:{}",
+                    span.path.display(),
+                    span.start.line,
+                    span.start.column
+                )
+            })
             .unwrap_or_else(|| "<unknown>".to_string());
         format!(
             "{level:?} {code}: {message} @ {location}",

@@ -9,8 +9,8 @@ use crate::soc::isa::ast::{
 };
 use crate::soc::isa::diagnostic::{DiagnosticPhase, SourcePosition, SourceSpan};
 
-use super::Validator;
 use super::super::error::IsaError;
+use super::Validator;
 
 pub(super) fn validate_src(source: &str) -> Result<(), IsaError> {
     let doc = parse_str(PathBuf::from("test.isa"), source)?;
@@ -25,9 +25,7 @@ pub(super) fn expect_validation_diag(err: IsaError, needle: &str) {
             diagnostics,
         } => {
             assert!(
-                diagnostics
-                    .iter()
-                    .any(|diag| diag.message.contains(needle)),
+                diagnostics.iter().any(|diag| diag.message.contains(needle)),
                 "no diagnostic containing '{needle}': {diagnostics:?}"
             );
         }

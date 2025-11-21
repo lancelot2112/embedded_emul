@@ -54,7 +54,9 @@ fn parse_equality_expr(parser: &mut Parser) -> Result<SemanticExpr, IsaError> {
         if parser.check(TokenKind::Equals)? {
             parser.consume()?;
             if !parser.check(TokenKind::Equals)? {
-                return Err(IsaError::Parser("expected '==' in semantic expression".into()));
+                return Err(IsaError::Parser(
+                    "expected '==' in semantic expression".into(),
+                ));
             }
             parser.consume()?;
             let rhs = parse_primary_expr(parser)?;
@@ -118,7 +120,9 @@ fn match_logical_and(parser: &mut Parser) -> Result<bool, IsaError> {
             parser.consume()?;
             Ok(true)
         } else {
-            Err(IsaError::Parser("logical operator '&&' requires two '&' tokens".into()))
+            Err(IsaError::Parser(
+                "logical operator '&&' requires two '&' tokens".into(),
+            ))
         }
     } else {
         Ok(false)
@@ -132,7 +136,9 @@ fn match_logical_or(parser: &mut Parser) -> Result<bool, IsaError> {
             parser.consume()?;
             Ok(true)
         } else {
-            Err(IsaError::Parser("logical operator '||' requires two '|' tokens".into()))
+            Err(IsaError::Parser(
+                "logical operator '||' requires two '|' tokens".into(),
+            ))
         }
     } else {
         Ok(false)

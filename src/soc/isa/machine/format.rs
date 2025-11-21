@@ -3,9 +3,9 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
+use super::MachineDescription;
 use super::instruction::InstructionPattern;
 use super::space::{FieldEncoding, FormInfo, OperandKind};
-use super::MachineDescription;
 
 pub(super) fn format_operand(
     machine: &MachineDescription,
@@ -13,10 +13,10 @@ pub(super) fn format_operand(
     value: u64,
 ) -> String {
     if let Some(binding) = &field.register {
-        if let Some(space) = machine.spaces.get(&binding.space)
-            && let Some(register) = space.registers.get(&binding.field)
-        {
-            return register.format(value);
+        if let Some(space) = machine.spaces.get(&binding.space) {
+            if let Some(register) = space.registers.get(&binding.field) {
+                return register.format(value);
+            }
         }
         return format!("{}{}", binding.field, value);
     }

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::soc::isa::ast::{IsaSpecification, SpaceKind};
 use crate::soc::isa::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
 use crate::soc::isa::error::IsaError;
+use crate::soc::isa::semantics::SemanticBlock;
 
 use super::spans::span_from_token;
 use super::{Lexer, Token, TokenKind};
@@ -102,6 +103,24 @@ impl<'src> Parser<'src> {
         };
         self.last_token = Some(token.clone());
         Ok(token)
+    }
+}
+
+impl<'src> Parser<'src> {
+    pub(super) fn parse_semantic_block(
+        &mut self,
+        context: &str,
+    ) -> Result<SemanticBlock, IsaError> {
+        self.expect(TokenKind::LBrace, &format!("'{{' to start {context}"))?;
+        let captured = self.lexer.capture_braced_block()?;
+        let closing = Token {
+            kind: TokenKind::RBrace,
+            lexeme: "}".into(),
+            line: captured.end_line,
+            column: captured.end_column,
+        };
+        self.last_token = Some(closing);
+        Ok(SemanticBlock::from_source(captured.body))
     }
 }
 

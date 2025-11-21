@@ -28,6 +28,7 @@ pub enum IsaItem {
     Space(SpaceDecl),
     SpaceMember(SpaceMemberDecl),
     Instruction(InstructionDecl),
+    Macro(MacroDecl),
     Include(IncludeDecl),
 }
 
@@ -145,6 +146,14 @@ pub struct InstructionDecl {
     pub semantics: Option<SemanticBlock>,
     pub display: Option<String>,
     pub operator: Option<String>,
+    pub span: SourceSpan,
+}
+
+#[derive(Debug, Clone)]
+pub struct MacroDecl {
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub semantics: SemanticBlock,
     pub span: SourceSpan,
 }
 

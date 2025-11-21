@@ -1,14 +1,25 @@
 //! Intermediate representation for semantic blocks embedded in `.isa` files.
 
-/// A semantic block captures structured actions (register transfers, flag updates, etc.).
+/// A semantic block captures the original source plus any parsed operations.
 #[derive(Debug, Clone)]
 pub struct SemanticBlock {
+    /// Raw source extracted from the `.isa` file between `{` and `}`.
+    pub source: String,
+    /// Structured operations (unused for now, but reserved for future lowering passes).
     pub ops: Vec<SemanticOp>,
 }
 
 impl SemanticBlock {
-    pub fn new(ops: Vec<SemanticOp>) -> Self {
-        Self { ops }
+    pub fn new(source: String, ops: Vec<SemanticOp>) -> Self {
+        Self { source, ops }
+    }
+
+    pub fn from_source(source: String) -> Self {
+        Self::new(source, Vec::new())
+    }
+
+    pub fn empty() -> Self {
+        Self::from_source(String::new())
     }
 }
 

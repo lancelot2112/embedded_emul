@@ -6,9 +6,9 @@ use std::collections::BTreeMap;
 use crate::soc::device::endianness::Endianness;
 use crate::soc::isa::ast::{FieldDecl, FormDecl, SpaceAttribute, SpaceDecl, SpaceKind, SubFieldOp};
 use crate::soc::isa::error::IsaError;
-use crate::soc::prog::types::{bitfield::BitFieldError, BitFieldSegment, BitFieldSpec, TypeId};
+use crate::soc::prog::types::{BitFieldSegment, BitFieldSpec, TypeId, bitfield::BitFieldError};
 
-use super::register::{derive_register_binding, RegisterBinding, RegisterInfo};
+use super::register::{RegisterBinding, RegisterInfo, derive_register_binding};
 
 #[derive(Debug, Clone)]
 pub struct SpaceInfo {
@@ -179,7 +179,10 @@ pub fn parse_bit_spec(word_bits: u32, spec: &str) -> Result<BitFieldSpec, BitFie
         .map_err(BitFieldSpecParseError::SpecError)
 }
 
-pub fn encode_constant(spec: &BitFieldSpec, value: u64) -> Result<(u64, u64), BitFieldSpecParseError> {
+pub fn encode_constant(
+    spec: &BitFieldSpec,
+    value: u64,
+) -> Result<(u64, u64), BitFieldSpecParseError> {
     let mask = spec
         .segments
         .iter()

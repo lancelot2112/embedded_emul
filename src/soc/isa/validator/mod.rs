@@ -102,7 +102,9 @@ impl Validator {
         }
         let max_size = *by_size.keys().next_back().unwrap();
         for (bits, spaces) in by_size.iter().filter(|(bits, _)| **bits != max_size) {
-            let covered = spaces.iter().any(|space| self.space_enables.contains(space));
+            let covered = spaces
+                .iter()
+                .any(|space| self.space_enables.contains(space));
             if !covered {
                 let joined = spaces.join(", ");
                 self.push_validation_diagnostic(

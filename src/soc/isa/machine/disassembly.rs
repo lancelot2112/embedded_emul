@@ -7,10 +7,12 @@ use crate::soc::isa::error::IsaError;
 use crate::soc::isa::semantics::{BinaryOperator, SemanticExpr};
 use crate::soc::prog::types::BitFieldSpec;
 
+use super::MachineDescription;
 use super::format;
 use super::instruction::{Instruction, InstructionPattern};
-use super::space::{encode_constant, ensure_byte_aligned, mask_for_bits, parse_bit_spec, SpaceInfo};
-use super::MachineDescription;
+use super::space::{
+    SpaceInfo, encode_constant, ensure_byte_aligned, mask_for_bits, parse_bit_spec,
+};
 
 #[derive(Debug, Clone)]
 pub struct Disassembly {
@@ -107,7 +109,8 @@ impl MachineDescription {
         }
 
         if spaces.is_empty() {
-            return Err(IsaError::Machine("no logic spaces defined".into()));
+            self.decode_spaces.clear();
+            return Ok(());
         }
 
         spaces.sort_by(|a, b| {
@@ -193,14 +196,12 @@ impl MachineDescription {
         for field in &mask_spec.fields {
             let spec = match &field.selector {
                 MaskSelector::Field(name) => self.resolve_form_field(instr, space, name)?,
-                MaskSelector::BitExpr(expr) => {
-                    parse_bit_spec(word_bits, expr).map_err(|err| {
-                        IsaError::Machine(format!(
-                            "invalid bit expression '{expr}' in instruction '{}': {err}",
-                            instr.name
-                        ))
-                    })?
-                }
+                MaskSelector::BitExpr(expr) => parse_bit_spec(word_bits, expr).map_err(|err| {
+                    IsaError::Machine(format!(
+                        "invalid bit expression '{expr}' in instruction '{}': {err}",
+                        instr.name
+                    ))
+                })?,
             };
             let (field_mask, encoded) = encode_constant(&spec, field.value).map_err(|err| {
                 IsaError::Machine(format!(
@@ -274,8 +275,7 @@ impl MachineDescription {
                 instr.name, space.name, form_name
             ))
         })?;
-        form
-            .subfield(name)
+        form.subfield(name)
             .map(|field| field.spec.clone())
             .ok_or_else(|| {
                 IsaError::Machine(format!(

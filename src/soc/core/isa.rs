@@ -123,7 +123,7 @@ mod tests {
             operator: None,
             mask: None,
             encoding: None,
-            semantics: Some(SemanticBlock::new(Vec::new())),
+            semantics: Some(SemanticBlock::empty()),
         });
         machine
     }

@@ -1,41 +1,41 @@
-#EREFRM_2..0.pdf
+//EREFRM_2..0.pdf
 
-#:access_levels {
-#    U descr="User mode"
-#    GS descr="Guest Supervisor"
-#    HV descr="Hypervisor"
-#}
+//:access_levels {
+//    U descr="User mode"
+//    GS descr="Guest Supervisor"
+//    HV descr="Hypervisor"
+//}
 
 :param ENDIAN=big
-#:param REGISTER_SIZE=32
+:param SIZE_MODE=32
 
-##### Logical Address Spaces for Registers #####
+//### Logical Address Spaces for Registers #####
 :space ram addr=64 word=32 type=rw align=16 endian=big
 :space reg addr=32 word=64 type=register align=16 endian=big
 :space insn addr=32 word=32 type=logic align=16 endian=big
 
-##### Registers (in register space) #####
+//### Registers (in register space) #####
 :reg GPR[0..31] offset=0x0 size=64 reset=0 disp="r%d"
 subfields={
-#!if endian=big
+//!if endian=big
     msb @(0..31)
     lsb @(32..63)
-#!else
-#    msb @(32..63)
-#    lsb @(0..31)
-#!endif
+//!else
+//    msb @(32..63)
+//    lsb @(0..31)
+//!endif
 }
 
-#Special Purpose Registers
+//Special Purpose Registers
 
-#First define the entire SPR space
+//First define the entire SPR space
 :reg SPR[0..1023] offset=0x1000 size=64
 subfields={
     msb @(0..31)
     lsb @(32..63)
 }
 
-#Use the redirect function to call out specific SPRs and to route them to the same backing memory
+//Use the redirect function to call out specific SPRs and to route them to the same backing memory
 :reg XER redirect=SPR1
 subfields={
     SO @(32)    descr="Summary Overflow"
@@ -44,7 +44,7 @@ subfields={
     SL @(57..63) descr="String Length"
 }
 
-#Processor Control Registers
+//Processor Control Registers
 :reg LR redirect=SPR8
 :reg CTR redirect=SPR9
 :reg DEC redirect=SPR22::lsb
@@ -58,15 +58,15 @@ subfields={
 :reg ESR redirect=SPR62
 :reg IVPR redirect=SPR63
 
-#SPRG
+//SPRG
 :reg USPRG0 redirect=SPR256
 :reg VRSAVE redirect=SPR256
 :reg SPRG0 redirect=SPR272
 :reg SPRG1 redirect=SPR273
 :reg SPRG2 redirect=SPR274
 :reg SPRG3 redirect=SPR259
-#this redirect will take priority over the original definition and link them to the
-#same physical register space "SPR259" as per the EREF pg.63
+//this redirect will take priority over the original definition and link them to the
+//same physical register space "SPR259" as per the EREF pg.63
 :reg SPR275 redirect=SPR259
 :reg SPRG4 redirect=SPR260
 :reg SPR276 redirect=SPR260
@@ -77,7 +77,7 @@ subfields={
 :reg SPRG7 redirect=SPR263
 :reg SPR279 redirect=SPR263
 
-#Time Base
+//Time Base
 :reg TB redirect=SPR268
 :reg TBU redirect=SPR268::msb
 :reg TBL redirect=SPR268::lsb
@@ -85,11 +85,11 @@ subfields={
 :reg SPR284 redirect=TBL
 :reg SPR285 redirect=TBU
 
-#Versioning
+//Versioning
 :reg PIR redirect=SPR286
 :reg PVR redirect=SPR287
 
-#Debug Controls
+//Debug Controls
 :reg DBSR redirect=SPR304
 :reg DBSRWR redirect=SPR306
 :reg EPCR redirect=SPR307
@@ -98,7 +98,7 @@ subfields={
 :reg DBCR2 redirect=SPR310
 :reg MSRP redirect=SPR311
 
-#TODO: Keep adding values past 311
+//TODO: Keep adding values past 311
 
 
 
@@ -131,9 +131,9 @@ subfields={
     BPEN @(63)
 }
 
-# Define instruction forms for different encoding patterns
+// Define instruction forms for different encoding patterns
 
-# X-Form: Register-to-register operations with extended opcode
+// X-Form: Register-to-register operations with extended opcode
 :insn X_Form subfields={
     OPCD @(0..5) op=func descr="Primary opcode"
     RT @(6..10) op=target|$reg::GPR descr="Target register"  
@@ -143,14 +143,14 @@ subfields={
     Rc @(31) op=func descr="Record condition"
 } disp="#RT, #RA, #RB"
 
-# XO-Form: Inherited from X-Form with overflow enable
+// XO-Form: Inherited from X-Form with overflow enable
 :insn::X_Form XO_Form subfields={
     OE @(21) op=func descr="Overflow enable"
-    # Note: OE overlaps with XO @(21..30) - this generates a warning
-    # but both fields coexist for different instruction variants
+    // Note: OE overlaps with XO @(21..30) - this generates a warning
+    // but both fields coexist for different instruction variants
 } disp="#RT, #RA, #RB"
 
-# D-Form: Register with immediate displacement
+// D-Form: Register with immediate displacement
 :insn D_Form subfields={
     OPCD @(0..5) op=func descr="Primary opcode"
     RT @(6..10) op=target|$reg::GPR descr="Target register"
@@ -158,7 +158,7 @@ subfields={
     D @(16..31) op=immediate descr="Displacement/Immediate"
 } disp="#RT, #RA, #D"
 
-# I-Form: Branch instructions with large immediate
+// I-Form: Branch instructions with large immediate
 :insn I_Form subfields={
     OPCD @(0..5) op=func descr="Primary opcode"
     LI @(6..29) op=immediate descr="Immediate value"
@@ -166,30 +166,70 @@ subfields={
     LK @(31) op=func descr="Link bit"
 } disp="#LI"
 
+//pc_add(a@(0:63),b@(0:63),bits)
+
+:macro upd_cr0(res) {
+    $reg::CR0::NEG = #res < 0
+    $reg::CR0::POS = #res > 0
+    $reg::CR0::ZERO = #res == 0
+    $reg::CR0::SO = $reg::XER::SO
+}
+
+:macro upd_xer_int(res,carry) {
+    $reg::XER::OV = #res@(63) ^ #carry 
+    $reg::XER::SO = $reg::XER::SO | $reg::XER::OV
+}
+
+//EREF 2.0 Rev.0 pg.5-12
+:insn::X_Form add mask={OPCD=31, XO=266, Rc=0} descr="Add (X-Form)" op="+" semantics={ 
+    a = $reg::GPR(#RA)  //treat as a read
+    b = $reg::GPR(#RB)
+    (res,carry) = $pc::add(a,b,#SIZE_MODE)
+    $reg::GPR(#RT) = res
+}
+:insn::X_Form add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record (X-Form)" op="+" semantics={
+    $insn::add(#RT,#RA,#RB)    // We want all the mutation effects of "add"
+    $macro::upd_cr0(res)        // plus we want to update our CR0 registers
+}
+:insn::XO_Form addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow (XO-Form)" op="+" semantics={
+    $insn::add(#RT,#RA,#RB)
+    $macro::upd_xer_int(res,carry)
+}
+:insn::XO_Form addo. mask={OPCD=31, XO=266, OE=1, Rc=1} descr="Add with overflow and record (XO-Form)" op="+" semantics={
+    $insn::add(#RT,#RA,#RB)
+    $macro::upd_xer_int(res,carry)
+    $macro::upd_cr0(res)
+}
 
 
-:insn::X_Form add mask={OPCD=31, XO=266, Rc=0} descr="Add (X-Form)" op="+"
-:insn::X_Form add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record (X-Form)" op="+"
-:insn::XO_Form addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow (XO-Form)" op="+"
-:insn::XO_Form addo. mask={OPCD=31, XO=266, OE=1, Rc=1} descr="Add with overflow and record (XO-Form)" op="+"
-:insn::D_Form addi mask={OPCD=14} descr="Add immediate (D-Form)" op="+"
+//EREF 2.0 Rev.0 pg.5-13
+:insn::XO_Form addc mask={OPCD=31, XO=10, OE=0, Rc=0} descr="Add carrying" op="+" semantics={
+
+}
+
+//EREF 2.0 REV.0 pg.5-15
+:insn::D_Form addi mask={OPCD=14} descr="Add immediate (D-Form)" op="+" semantics={
+    a = $reg::GPR(#RA)
+    (res,carry) = $pc::add(a,#D,#SIZE_MODE)
+    $reg::GPR(#RT) = res
+}
 :insn::D_Form lwz mask={OPCD=32} descr="Load word and zero (D-Form)"
 :insn::X_Form lwzx mask={OPCD=31, XO=23, Rc=0} descr="Load word and zero indexed (X-Form)"
 :insn::I_Form b mask={OPCD=18, AA=0, LK=0} descr="Branch (I-Form)"
 :insn::I_Form ba mask={OPCD=18, AA=1, LK=0} descr="Branch absolute (I-Form)"
 :insn::I_Form bl mask={OPCD=18, AA=0, LK=1} descr="Branch and link (I-Form)"
 
-# MOVE instruction with explicit operand override
-# mr (move register) uses X-Form but only needs RT and RA operands
+// MOVE instruction with explicit operand override
+// mr (move register) uses X-Form but only needs RT and RA operands
 :insn::X_Form mr (RT, RA) mask={OPCD=31, XO=444, RB=0, Rc=0} descr="Move register (operand override)" disp="#RT<-#RA"
 :insn::XO_Form mullwo mask={OPCD=31, XO=235, OE=1, Rc=0} descr="Multiply low word with overflow" op="*"
 :insn::X_Form mullw mask={OPCD=31, XO=235, Rc=0} descr="Multiply low word" op="*"
 
-# GOOD EXAMPLES: Automatic operand inference
-# These instructions automatically get operands from their form definitions:
-# - X_Form instructions get (RT, RA, RB) - three register operands
-# - D_Form instructions get (RT, RA, D) - two registers plus immediate
-# - I_Form instructions get (LI) - one immediate operand (AA, LK are func type)
+// GOOD EXAMPLES: Automatic operand inference
+// These instructions automatically get operands from their form definitions:
+// - X_Form instructions get (RT, RA, RB) - three register operands
+// - D_Form instructions get (RT, RA, D) - two registers plus immediate
+// - I_Form instructions get (LI) - one immediate operand (AA, LK are func type)
 :insn::D_Form cmpi mask={OPCD=11} descr="Compare immediate"
 :insn::X_Form cmp mask={OPCD=31, XO=0, Rc=0} descr="Compare"
 :insn::D_Form stw mask={OPCD=36} descr="Store word (D-Form displacement)"

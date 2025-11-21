@@ -6,18 +6,20 @@
 mod disassembly;
 mod format;
 mod instruction;
+mod macros;
 mod register;
 mod space;
 
 pub use disassembly::Disassembly;
 pub use instruction::{Instruction, InstructionMask};
+pub use macros::MacroInfo;
 pub use register::{RegisterBinding, RegisterInfo};
-pub use space::{encode_constant, parse_bit_spec, FieldEncoding, FormInfo, OperandKind, SpaceInfo};
+pub use space::{FieldEncoding, FormInfo, OperandKind, SpaceInfo, encode_constant, parse_bit_spec};
 
 use std::collections::BTreeMap;
 
 use crate::soc::isa::ast::{
-    FieldDecl, FormDecl, IsaItem, IsaSpecification, SpaceDecl, SpaceKind, SpaceMember,
+    FieldDecl, FormDecl, IsaItem, IsaSpecification, MacroDecl, SpaceDecl, SpaceKind, SpaceMember,
 };
 use crate::soc::isa::error::IsaError;
 
@@ -28,6 +30,7 @@ use instruction::InstructionPattern;
 pub struct MachineDescription {
     pub instructions: Vec<Instruction>,
     pub spaces: BTreeMap<String, SpaceInfo>,
+    pub macros: Vec<MacroInfo>,
     patterns: Vec<InstructionPattern>,
     decode_spaces: Vec<LogicDecodeSpace>,
 }
@@ -37,6 +40,7 @@ impl Default for MachineDescription {
         Self {
             instructions: Vec::new(),
             spaces: BTreeMap::new(),
+            macros: Vec::new(),
             patterns: Vec::new(),
             decode_spaces: Vec::new(),
         }
@@ -53,6 +57,7 @@ impl MachineDescription {
         let mut forms = Vec::new();
         let mut fields = Vec::new();
         let mut instructions = Vec::new();
+        let mut macros = Vec::new();
         for doc in docs {
             for item in doc.items {
                 match item {
@@ -63,6 +68,7 @@ impl MachineDescription {
                         SpaceMember::Field(field) => fields.push(field),
                     },
                     IsaItem::Instruction(instr) => instructions.push(instr),
+                    IsaItem::Macro(mac) => macros.push(mac),
                     _ => {}
                 }
             }
@@ -80,6 +86,9 @@ impl MachineDescription {
         }
         for field in fields {
             machine.register_field(field)?;
+        }
+        for mac in macros {
+            machine.register_macro(mac);
         }
         machine.build_patterns()?;
         machine.build_decode_spaces()?;
@@ -126,15 +135,24 @@ impl MachineDescription {
         space.add_register_field(field);
         Ok(())
     }
+
+    fn register_macro(&mut self, mac: MacroDecl) {
+        self.macros.push(MacroInfo::from_decl(mac));
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::soc::device::endianness::Endianness;
-    use crate::soc::isa::ast::{SpaceAttribute, SpaceKind, SubFieldDecl};
+    use crate::soc::isa::ast::{
+        IsaItem, IsaSpecification, MacroDecl, SpaceAttribute, SpaceKind, SubFieldDecl,
+    };
     use crate::soc::isa::builder::{IsaBuilder, mask_field_selector, subfield_op};
+    use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
     use crate::soc::isa::machine::{encode_constant, parse_bit_spec};
+    use crate::soc::isa::semantics::SemanticBlock;
+    use std::path::PathBuf;
 
     #[test]
     fn lifter_decodes_simple_logic_space() {
@@ -260,10 +278,7 @@ mod tests {
             listing[0].operands,
             vec!["GPR1".to_string(), "GPR2".to_string(), "GPR3".to_string()]
         );
-        assert_eq!(
-            listing[0].display.as_deref(),
-            Some("GPR1 <- GPR2 + GPR3")
-        );
+        assert_eq!(listing[0].display.as_deref(), Some("GPR1 <- GPR2 + GPR3"));
 
         assert_eq!(listing[1].mnemonic, "swap");
         assert_eq!(
@@ -374,8 +389,7 @@ mod tests {
             .mask_field(mask_field_selector("OPC"), 0)
             .finish();
 
-        let machine = MachineDescription::from_documents(vec![builder.build()])
-            .expect("machine");
+        let machine = MachineDescription::from_documents(vec![builder.build()]).expect("machine");
         let bytes = [0x1Bu8];
         let listing = machine.disassemble(&bytes);
         assert_eq!(listing.len(), 1);
@@ -386,6 +400,24 @@ mod tests {
             vec!["GPR1".to_string(), "GPR2".to_string(), "GPR3".to_string()]
         );
         assert_eq!(entry.display.as_deref(), Some("GPR1, GPR2, GPR3"));
+    }
+
+    #[test]
+    fn collects_macros_from_documents() {
+        let macro_decl = MacroDecl {
+            name: "upd".into(),
+            parameters: vec!["res".into()],
+            semantics: SemanticBlock::from_source("$reg::CR0 = #res".into()),
+            span: SourceSpan::point(PathBuf::from("test.isa"), SourcePosition::new(1, 1)),
+        };
+        let doc =
+            IsaSpecification::new(PathBuf::from("test.isa"), vec![IsaItem::Macro(macro_decl)]);
+        let machine = MachineDescription::from_documents(vec![doc]).expect("machine");
+        assert_eq!(machine.macros.len(), 1);
+        let mac = &machine.macros[0];
+        assert_eq!(mac.name, "upd");
+        assert_eq!(mac.parameters, vec!["res".to_string()]);
+        assert!(mac.semantics.source.contains("#res"));
     }
 
     #[test]

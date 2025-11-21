@@ -117,7 +117,9 @@ impl CoreSpecBuilder {
 
     pub fn build(mut self) -> Result<CoreSpec, CoreSpecBuildError> {
         if !self.errors.is_empty() {
-            return Err(CoreSpecBuildError { errors: self.errors });
+            return Err(CoreSpecBuildError {
+                errors: self.errors,
+            });
         }
         self.registers.sort_by_key(|spec| spec.bit_offset);
         let mut index = HashMap::with_capacity(self.registers.len());
@@ -141,8 +143,7 @@ impl CoreSpecBuilder {
 
     fn push_spec(&mut self, name: String, bit_offset: u32, bit_len: u32) {
         if !self.seen.insert(name.clone()) {
-            self.errors
-                .push(CoreSpecError::DuplicateRegister(name));
+            self.errors.push(CoreSpecError::DuplicateRegister(name));
             return;
         }
         self.registers.push(RegisterSpec {
@@ -211,7 +212,11 @@ impl std::fmt::Display for CoreSpecBuildError {
         if self.errors.is_empty() {
             return write!(f, "descriptor build failed");
         }
-        writeln!(f, "descriptor build failed with {} error(s):", self.errors.len())?;
+        writeln!(
+            f,
+            "descriptor build failed with {} error(s):",
+            self.errors.len()
+        )?;
         for err in &self.errors {
             writeln!(f, "  - {err}")?;
         }
@@ -228,7 +233,10 @@ impl std::fmt::Display for CoreSpecError {
                 write!(f, "register '{name}' declared multiple times")
             }
             CoreSpecError::InvalidWidth { name, width } => {
-                write!(f, "register '{name}' must reserve at least 1 bit (got {width})")
+                write!(
+                    f,
+                    "register '{name}' must reserve at least 1 bit (got {width})"
+                )
             }
         }
     }
@@ -239,9 +247,9 @@ impl std::error::Error for CoreSpecError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::isa::machine::SpaceInfo;
-    use crate::soc::isa::machine::RegisterInfo;
     use crate::soc::isa::machine::MachineDescription;
+    use crate::soc::isa::machine::RegisterInfo;
+    use crate::soc::isa::machine::SpaceInfo;
     use std::collections::BTreeMap;
 
     #[test]

@@ -1,11 +1,12 @@
 use std::path::PathBuf;
 
-use crate::soc::isa::ast::{IncludeDecl, IsaItem};
-use crate::soc::isa::error::IsaError;
+use super::spans::span_from_tokens;
 use super::{
     Parser, TokenKind, parameters::parse_parameter_decl, space::parse_space_directive,
     space_context::parse_space_context_directive,
 };
+use crate::soc::isa::ast::{IncludeDecl, IsaItem, MacroDecl};
+use crate::soc::isa::error::IsaError;
 
 impl<'src> Parser<'src> {
     pub(super) fn parse_directive(&mut self) -> Result<IsaItem, IsaError> {
@@ -16,6 +17,7 @@ impl<'src> Parser<'src> {
             "param" => self.parse_param_directive(),
             "space" => parse_space_directive(self),
             "include" => self.parse_include_directive(),
+            "macro" => self.parse_macro_directive(),
             _ => {
                 if self.is_known_space(&name) {
                     self.parse_space_context(&name)
@@ -49,6 +51,43 @@ impl<'src> Parser<'src> {
             path: PathBuf::from(path.lexeme),
             optional: false,
         }))
+    }
+
+    fn parse_macro_directive(&mut self) -> Result<IsaItem, IsaError> {
+        let name_token = self.expect_identifier_token("macro name")?;
+        let params = self.parse_macro_parameters()?;
+        let semantics = self.parse_semantic_block("macro body")?;
+        let end_token = self
+            .last_consumed_token()
+            .cloned()
+            .unwrap_or_else(|| name_token.clone());
+        let span = span_from_tokens(self.file_path(), &name_token, &end_token);
+        Ok(IsaItem::Macro(MacroDecl {
+            name: name_token.lexeme,
+            parameters: params,
+            semantics,
+            span,
+        }))
+    }
+
+    fn parse_macro_parameters(&mut self) -> Result<Vec<String>, IsaError> {
+        self.expect(TokenKind::LParen, "'(' to start macro parameter list")?;
+        let mut params = Vec::new();
+        if self.check(TokenKind::RParen)? {
+            self.consume()?;
+            return Ok(params);
+        }
+        loop {
+            let param = self.expect_identifier("macro parameter")?;
+            params.push(param);
+            if self.check(TokenKind::Comma)? {
+                self.consume()?;
+                continue;
+            }
+            self.expect(TokenKind::RParen, "')' to close macro parameter list")?;
+            break;
+        }
+        Ok(params)
     }
 
     fn parse_space_context(&mut self, name: &str) -> Result<IsaItem, IsaError> {
@@ -250,8 +289,21 @@ mod tests {
 
     #[test]
     fn rejects_include_outside_coredef() {
-        let err = parse_str(PathBuf::from("test.isa"), ":include \"base.isa\"")
-            .unwrap_err();
+        let err = parse_str(PathBuf::from("test.isa"), ":include \"base.isa\"").unwrap_err();
         expect_parser_diag(err, "only allowed inside .coredef");
+    }
+
+    #[test]
+    fn parses_macro_directive() {
+        let doc = parse(":macro upd_cr0(res) {$reg::CR0 = #res}");
+        assert_eq!(doc.items.len(), 1);
+        match &doc.items[0] {
+            IsaItem::Macro(mac) => {
+                assert_eq!(mac.name, "upd_cr0");
+                assert_eq!(mac.parameters, vec!["res".to_string()]);
+                assert!(mac.semantics.source.contains("#res"));
+            }
+            other => panic!("unexpected item: {other:?}"),
+        }
     }
 }

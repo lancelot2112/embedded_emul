@@ -144,7 +144,10 @@ impl std::fmt::Display for StateError {
             StateError::Bus(err) => write!(f, "bus error: {err}"),
             StateError::UnknownRegister(name) => write!(f, "unknown register '{name}'"),
             StateError::RegisterWidthOverflow { register, bits } => {
-                write!(f, "register '{register}' width {bits} exceeds bus slice limit")
+                write!(
+                    f,
+                    "register '{register}' width {bits} exceeds bus slice limit"
+                )
             }
         }
     }

@@ -7,10 +7,6 @@ pub mod state;
 
 pub use isa::{InstructionSemantics, IsaSpec, IsaSpecError};
 pub use specification::{
-    CoreSpec,
-    CoreSpecBuilder,
-    CoreSpecBuildError,
-    CoreSpecError,
-    RegisterSpec,
+    CoreSpec, CoreSpecBuildError, CoreSpecBuilder, CoreSpecError, RegisterSpec,
 };
 pub use state::{CoreState, RegisterLayout, StateError, StateResult};

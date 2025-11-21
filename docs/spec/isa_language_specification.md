@@ -58,7 +58,7 @@ Linting and coloring should both utilize a common tokenization scheme and avoid 
 
   Any detected numeric literal is highlighted (default: `tan with a hint of green`).
 
-#### 5.1.2 **Comments**: Anything after a `#` character in any line is a comment and should be ignored for linting. Comments are highlighted (default: `green`).
+#### 5.1.2 **Comments**: Anything after a `//` sequence on a line is a comment and should be ignored for linting. Comments are highlighted (default: `green`).
 
 #### 5.1.3 **Quoted Strings**: Values containing spaces or special characters should be enclosed in double quotes (e.g., `"User mode"`). Strings are highlighted (default: `orange`).
 

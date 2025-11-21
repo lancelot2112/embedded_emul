@@ -4,7 +4,7 @@ use crate::soc::isa::error::IsaError;
 use crate::soc::prog::types::parse_u32_literal;
 
 use super::spans::span_from_tokens;
-use super::{parse_semantic_expr_block, Parser, TokenKind};
+use super::{Parser, TokenKind, parse_semantic_expr_block};
 
 pub(super) fn parse_space_directive(parser: &mut Parser) -> Result<IsaItem, IsaError> {
     let name_token = parser.expect_identifier_token("space name")?;
