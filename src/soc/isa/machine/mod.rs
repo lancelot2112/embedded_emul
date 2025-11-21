@@ -5,12 +5,14 @@
 
 mod disassembly;
 mod format;
+mod host;
 mod instruction;
 mod macros;
 mod register;
 mod space;
 
 pub use disassembly::Disassembly;
+pub use host::{HostArithResult, HostMulResult, HostServices, SoftwareHost};
 pub use instruction::{Instruction, InstructionMask};
 pub use macros::MacroInfo;
 pub use register::{RegisterBinding, RegisterInfo};
