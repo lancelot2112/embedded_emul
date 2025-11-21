@@ -37,6 +37,8 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
     let mut mask: Option<MaskSpec> = None;
     let mut subfields: Option<Vec<SubFieldDecl>> = None;
     let mut seen_semantics = false;
+    let mut display: Option<String> = None;
+    let mut operator: Option<String> = None;
 
     while !parser.check(TokenKind::EOF)? && !parser.check(TokenKind::Colon)? {
         let attr_token = parser.expect_identifier_token("logic attribute name")?;
@@ -71,6 +73,24 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
             "semantics" => {
                 skip_braced_block(parser, "semantics block")?;
                 seen_semantics = true;
+            }
+            "disp" => {
+                if display.is_some() {
+                    return Err(IsaError::Parser(format!(
+                        "duplicate disp attribute for '{name}'"
+                    )));
+                }
+                let value = parser.expect(TokenKind::String, "string literal for disp")?;
+                display = Some(value.lexeme);
+            }
+            "op" => {
+                if operator.is_some() {
+                    return Err(IsaError::Parser(format!(
+                        "duplicate op attribute for '{name}'"
+                    )));
+                }
+                let value = parser.expect(TokenKind::String, "string literal for op")?;
+                operator = Some(value.lexeme);
             }
             other => {
                 return Err(IsaError::Parser(format!(
@@ -109,11 +129,17 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
                 "forms cannot declare semantics blocks ('{name}')"
             )));
         }
+        if operator.is_some() {
+            return Err(IsaError::Parser(format!(
+                "forms cannot declare an op attribute ('{name}')"
+            )));
+        }
         let form = FormDecl {
             space: space.to_string(),
             name,
             parent: qualifier,
             description: description.clone(),
+            display: display.clone(),
             subfields,
             span,
         };
@@ -138,6 +164,8 @@ fn parse_logic_context_directive(parser: &mut Parser, space: &str) -> Result<Isa
         mask,
         encoding: None,
         semantics: None,
+        display,
+        operator,
         span,
     };
     Ok(IsaItem::SpaceMember(SpaceMemberDecl {

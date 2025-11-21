@@ -104,11 +104,13 @@ impl MachineDescription {
             let entry = if let Some(pattern) = self.best_match(&space.name, bits) {
                 let instr = &self.instructions[pattern.instruction_idx];
                 let operands = self.decode_operands(pattern, bits);
+                let display = self.render_display(pattern, bits, &operands);
                 Disassembly {
                     address,
                     opcode: bits,
                     mnemonic: instr.name.clone(),
                     operands,
+                    display,
                 }
             } else {
                 Disassembly {
@@ -116,6 +118,7 @@ impl MachineDescription {
                     opcode: bits,
                     mnemonic: "unknown".into(),
                     operands: vec![format!("0x{bits:0width$X}", width = space.word_bytes * 2)],
+                    display: None,
                 }
             };
             listing.push(entry);
@@ -170,6 +173,34 @@ impl MachineDescription {
                     .unwrap_or_else(|| format!("?{name}"))
             })
             .collect()
+    }
+
+    fn render_display(
+        &self,
+        pattern: &InstructionPattern,
+        bits: u64,
+        operands: &[String],
+    ) -> Option<String> {
+        let template = pattern.display.as_ref()?;
+        let Some(space) = self.spaces.get(&pattern.space) else {
+            return Some(template.clone());
+        };
+        let Some(form_name) = pattern.form.as_ref() else {
+            return Some(template.clone());
+        };
+        let Some(form) = space.forms.get(form_name) else {
+            return Some(template.clone());
+        };
+
+        Some(DisplayRenderer::new(
+            template,
+            self,
+            form,
+            pattern,
+            bits,
+            operands,
+        )
+        .render())
     }
 
     fn register_space(&mut self, space: SpaceDecl) {
@@ -262,6 +293,10 @@ impl MachineDescription {
             return format!("{}{}", binding.field, value);
         }
 
+        if field.kind == OperandKind::Immediate {
+            return self.format_immediate(field, value);
+        }
+
         if field
             .operations
             .iter()
@@ -271,6 +306,21 @@ impl MachineDescription {
         }
 
         format!("{value}")
+    }
+
+    fn format_immediate(&self, field: &FieldEncoding, value: u64) -> String {
+        let mut bits = u32::from(field.spec.data_width());
+        if bits == 0 {
+            bits = 1;
+        }
+        let digits = ((bits as usize) + 3) / 4;
+        let truncated = if bits >= 64 {
+            value
+        } else {
+            let mask = (1u64 << bits) - 1;
+            value & mask
+        };
+        format!("0x{truncated:0digits$X}")
     }
 
     fn build_pattern(
@@ -356,6 +406,18 @@ impl MachineDescription {
                 .unwrap_or_default()
         };
 
+        let form_display = instr
+            .form
+            .as_ref()
+            .and_then(|form_name| space.forms.get(form_name))
+            .and_then(|form| form.display.clone());
+
+        let display = instr
+            .display
+            .clone()
+            .or(form_display)
+            .or_else(|| default_display_template(instr.form.as_ref(), &operand_names));
+
         Ok(Some(InstructionPattern {
             instruction_idx: idx,
             space: instr.space.clone(),
@@ -363,6 +425,8 @@ impl MachineDescription {
             mask,
             value: value_bits,
             operand_names,
+            display,
+            operator: instr.operator.clone(),
             specificity: mask.count_ones(),
         }))
     }
@@ -437,12 +501,18 @@ impl SpaceInfo {
                 ))
             })?;
             let register = derive_register_binding(&sub.operations);
+            let operand_kind = classify_operand_kind(register.as_ref(), &sub.operations);
             info.push_field(FieldEncoding {
                 name: sub.name,
                 spec,
                 operations: sub.operations,
                 register,
+                kind: operand_kind,
             });
+        }
+
+        if let Some(template) = form.display.clone() {
+            info.display = Some(template);
         }
 
         self.forms.insert(form.name, info);
@@ -493,6 +563,8 @@ pub struct Instruction {
     pub form: Option<String>,
     pub description: Option<String>,
     pub operands: Vec<String>,
+    pub display: Option<String>,
+    pub operator: Option<String>,
     pub mask: Option<InstructionMask>,
     pub encoding: Option<BitFieldSpec>,
     pub semantics: Option<SemanticBlock>,
@@ -506,6 +578,8 @@ impl Instruction {
             form: decl.form,
             description: decl.description,
             operands: decl.operands,
+            display: decl.display,
+            operator: decl.operator,
             mask: decl.mask.map(|mask| InstructionMask {
                 fields: mask.fields,
             }),
@@ -526,6 +600,7 @@ pub struct Disassembly {
     pub opcode: u64,
     pub mnemonic: String,
     pub operands: Vec<String>,
+    pub display: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -680,6 +755,8 @@ struct InstructionPattern {
     mask: u64,
     value: u64,
     operand_names: Vec<String>,
+    display: Option<String>,
+    operator: Option<String>,
     specificity: u32,
 }
 
@@ -688,6 +765,7 @@ pub struct FormInfo {
     fields: Vec<FieldEncoding>,
     field_index: BTreeMap<String, usize>,
     operand_order: Vec<String>,
+    display: Option<String>,
 }
 
 impl FormInfo {
@@ -696,6 +774,7 @@ impl FormInfo {
             fields: Vec::new(),
             field_index: BTreeMap::new(),
             operand_order: Vec::new(),
+            display: None,
         }
     }
 
@@ -725,6 +804,7 @@ pub struct FieldEncoding {
     pub spec: BitFieldSpec,
     pub operations: Vec<SubFieldOp>,
     pub register: Option<RegisterBinding>,
+    pub kind: OperandKind,
 }
 
 impl FieldEncoding {
@@ -736,8 +816,36 @@ impl FieldEncoding {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperandKind {
+    Register,
+    Immediate,
+    Other,
+}
+
 fn derive_register_binding(ops: &[SubFieldOp]) -> Option<RegisterBinding> {
     ops.iter().find_map(parse_register_op)
+}
+
+fn classify_operand_kind(register: Option<&RegisterBinding>, ops: &[SubFieldOp]) -> OperandKind {
+    if register.is_some() {
+        return OperandKind::Register;
+    }
+    if ops.iter().any(|op| {
+        let kind = op.kind.to_ascii_lowercase();
+        kind == "immediate" || kind.starts_with("imm")
+    }) {
+        return OperandKind::Immediate;
+    }
+    OperandKind::Other
+}
+
+fn default_display_template(form: Option<&String>, operands: &[String]) -> Option<String> {
+    if form.is_none() || operands.is_empty() {
+        return None;
+    }
+    let parts: Vec<String> = operands.iter().map(|name| format!("#{name}")).collect();
+    Some(parts.join(", "))
 }
 
 fn parse_register_op(op: &SubFieldOp) -> Option<RegisterBinding> {
@@ -781,6 +889,97 @@ pub struct RegisterBinding {
 }
 
 impl Instruction {}
+
+struct DisplayRenderer<'a> {
+    machine: &'a MachineDescription,
+    template: &'a str,
+    form: &'a FormInfo,
+    pattern: &'a InstructionPattern,
+    bits: u64,
+    operands: &'a [String],
+}
+
+impl<'a> DisplayRenderer<'a> {
+    fn new(
+        template: &'a str,
+        machine: &'a MachineDescription,
+        form: &'a FormInfo,
+        pattern: &'a InstructionPattern,
+        bits: u64,
+        operands: &'a [String],
+    ) -> Self {
+        Self {
+            machine,
+            template,
+            form,
+            pattern,
+            bits,
+            operands,
+        }
+    }
+
+    fn render(&self) -> String {
+        let mut result = String::with_capacity(self.template.len());
+        let mut chars = self.template.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch != '#' {
+                result.push(ch);
+                continue;
+            }
+            if matches!(chars.peek(), Some('#')) {
+                chars.next();
+                result.push('#');
+                continue;
+            }
+            let token = Self::next_identifier(&mut chars);
+            if token.is_empty() {
+                result.push('#');
+                continue;
+            }
+            if let Some(value) = self.resolve_token(&token) {
+                result.push_str(&value);
+            } else {
+                result.push('#');
+                result.push_str(&token);
+            }
+        }
+        result
+    }
+
+    fn next_identifier(iter: &mut Peekable<Chars<'_>>) -> String {
+        let mut ident = String::new();
+        while let Some(&ch) = iter.peek() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ident.push(ch);
+                iter.next();
+            } else {
+                break;
+            }
+        }
+        ident
+    }
+
+    fn resolve_token(&self, token: &str) -> Option<String> {
+        if token.eq_ignore_ascii_case("op") {
+            return self.pattern.operator.as_ref().cloned();
+        }
+        if let Some(value) = self.operand_value(token) {
+            return Some(value.to_string());
+        }
+        let field = self.form.subfield(token)?;
+        let (value, _) = field.spec.read_bits(self.bits);
+        Some(self.machine.format_operand(field, value))
+    }
+
+    fn operand_value(&self, token: &str) -> Option<&str> {
+        self.pattern
+            .operand_names
+            .iter()
+            .zip(self.operands.iter())
+            .find(|(name, _)| name.as_str() == token)
+            .map(|(_, value)| value.as_str())
+    }
+}
 
 fn ensure_byte_aligned(word_bits: u32, instr: &str) -> Result<usize, IsaError> {
     if word_bits % 8 != 0 {
@@ -998,6 +1197,207 @@ mod tests {
         assert_eq!(entry.mnemonic, "mov");
         assert_eq!(entry.operands, vec!["GPR5".to_string()]);
         assert_eq!(entry.opcode, 0xA5);
+    }
+
+    #[test]
+    fn display_templates_apply_form_defaults_and_overrides() {
+        let mut builder = IsaBuilder::new("display.isa");
+        builder.add_space(
+            "logic",
+            SpaceKind::Logic,
+            vec![
+                SpaceAttribute::WordSize(8),
+                SpaceAttribute::Endianness(Endianness::Big),
+            ],
+        );
+        builder.add_form_with_display(
+            "logic",
+            "BIN",
+            None,
+            Some("#RT <- #RA #op #RB".into()),
+            vec![
+                SubFieldDecl {
+                    name: "OPC".into(),
+                    bit_spec: "@(0..1)".into(),
+                    operations: vec![subfield_op("func", None::<&str>)],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "RT".into(),
+                    bit_spec: "@(2..3)".into(),
+                    operations: vec![
+                        subfield_op("target", None::<&str>),
+                        subfield_op("reg", Some("GPR")),
+                    ],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "RA".into(),
+                    bit_spec: "@(4..5)".into(),
+                    operations: vec![
+                        subfield_op("source", None::<&str>),
+                        subfield_op("reg", Some("GPR")),
+                    ],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "RB".into(),
+                    bit_spec: "@(6..7)".into(),
+                    operations: vec![
+                        subfield_op("source", None::<&str>),
+                        subfield_op("reg", Some("GPR")),
+                    ],
+                    description: None,
+                },
+            ],
+        );
+        builder
+            .instruction("logic", "add")
+            .form("BIN")
+            .operator("+")
+            .mask_field(mask_field_selector("OPC"), 0)
+            .finish();
+        builder
+            .instruction("logic", "swap")
+            .form("BIN")
+            .display("#RT <-> #RA")
+            .mask_field(mask_field_selector("OPC"), 1)
+            .finish();
+
+        let machine = MachineDescription::from_documents(vec![builder.build()]).expect("machine");
+        let bytes = [0x1Bu8, 0x4Eu8];
+        let listing = machine.disassemble(&bytes);
+        assert_eq!(listing.len(), 2);
+        assert_eq!(listing[0].mnemonic, "add");
+        assert_eq!(
+            listing[0].operands,
+            vec!["GPR1".to_string(), "GPR2".to_string(), "GPR3".to_string()]
+        );
+        assert_eq!(
+            listing[0].display.as_deref(),
+            Some("GPR1 <- GPR2 + GPR3")
+        );
+
+        assert_eq!(listing[1].mnemonic, "swap");
+        assert_eq!(
+            listing[1].operands,
+            vec!["GPR0".to_string(), "GPR3".to_string(), "GPR2".to_string()]
+        );
+        assert_eq!(listing[1].display.as_deref(), Some("GPR0 <-> GPR3"));
+    }
+
+    #[test]
+    fn immediate_operands_render_in_hex() {
+        let mut builder = IsaBuilder::new("imm.isa");
+        builder.add_space(
+            "logic",
+            SpaceKind::Logic,
+            vec![
+                SpaceAttribute::WordSize(16),
+                SpaceAttribute::Endianness(Endianness::Big),
+            ],
+        );
+        builder.add_form(
+            "logic",
+            "IMM",
+            None,
+            vec![
+                SubFieldDecl {
+                    name: "OPC".into(),
+                    bit_spec: "@(0..3)".into(),
+                    operations: vec![subfield_op("func", None::<&str>)],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "SIMM".into(),
+                    bit_spec: "@(4..15)".into(),
+                    operations: vec![subfield_op("immediate", None::<&str>)],
+                    description: None,
+                },
+            ],
+        );
+        builder
+            .instruction("logic", "addi")
+            .form("IMM")
+            .mask_field(mask_field_selector("OPC"), 0xA)
+            .finish();
+
+        let machine = MachineDescription::from_documents(vec![builder.build()]).expect("machine");
+        let bytes = [0xA1u8, 0x23u8];
+        let listing = machine.disassemble(&bytes);
+        assert_eq!(listing.len(), 1);
+        assert_eq!(listing[0].mnemonic, "addi");
+        assert_eq!(listing[0].operands, vec!["0x123".to_string()]);
+    }
+
+    #[test]
+    fn default_display_lists_non_func_operands() {
+        let mut builder = IsaBuilder::new("default_disp.isa");
+        builder.add_space(
+            "logic",
+            SpaceKind::Logic,
+            vec![
+                SpaceAttribute::WordSize(8),
+                SpaceAttribute::Endianness(Endianness::Big),
+            ],
+        );
+        builder.add_form(
+            "logic",
+            "RAW",
+            None,
+            vec![
+                SubFieldDecl {
+                    name: "OPC".into(),
+                    bit_spec: "@(0..1)".into(),
+                    operations: vec![subfield_op("func", None::<&str>)],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "RT".into(),
+                    bit_spec: "@(2..3)".into(),
+                    operations: vec![
+                        subfield_op("target", None::<&str>),
+                        subfield_op("reg", Some("GPR")),
+                    ],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "RA".into(),
+                    bit_spec: "@(4..5)".into(),
+                    operations: vec![
+                        subfield_op("source", None::<&str>),
+                        subfield_op("reg", Some("GPR")),
+                    ],
+                    description: None,
+                },
+                SubFieldDecl {
+                    name: "RB".into(),
+                    bit_spec: "@(6..7)".into(),
+                    operations: vec![
+                        subfield_op("source", None::<&str>),
+                        subfield_op("reg", Some("GPR")),
+                    ],
+                    description: None,
+                },
+            ],
+        );
+        builder
+            .instruction("logic", "copy")
+            .form("RAW")
+            .mask_field(mask_field_selector("OPC"), 0)
+            .finish();
+
+        let machine = MachineDescription::from_documents(vec![builder.build()]).expect("machine");
+        let bytes = [0x1Bu8];
+        let listing = machine.disassemble(&bytes);
+        assert_eq!(listing.len(), 1);
+        let entry = &listing[0];
+        assert_eq!(entry.mnemonic, "copy");
+        assert_eq!(
+            entry.operands,
+            vec!["GPR1".to_string(), "GPR2".to_string(), "GPR3".to_string()]
+        );
+        assert_eq!(entry.display.as_deref(), Some("GPR1, GPR2, GPR3"));
     }
 
     #[test]

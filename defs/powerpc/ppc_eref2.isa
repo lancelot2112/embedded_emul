@@ -141,7 +141,14 @@ subfields={
     RB @(16..20) op=source|$reg::GPR descr="Source register B"
     XO @(21..30) op=func descr="Extended opcode"
     Rc @(31) op=func descr="Record condition"
-}
+} disp="#RT, #RA, #RB"
+
+# XO-Form: Inherited from X-Form with overflow enable
+:insn::X_Form XO_Form subfields={
+    OE @(21) op=func descr="Overflow enable"
+    # Note: OE overlaps with XO @(21..30) - this generates a warning
+    # but both fields coexist for different instruction variants
+} disp="#RT, #RA, #RB"
 
 # D-Form: Register with immediate displacement
 :insn D_Form subfields={
@@ -149,7 +156,7 @@ subfields={
     RT @(6..10) op=target|$reg::GPR descr="Target register"
     RA @(11..15) op=source|$reg::GPR descr="Source register"
     D @(16..31) op=immediate descr="Displacement/Immediate"
-}
+} disp="#RT, #RA, #D"
 
 # I-Form: Branch instructions with large immediate
 :insn I_Form subfields={
@@ -157,20 +164,15 @@ subfields={
     LI @(6..29) op=immediate descr="Immediate value"
     AA @(30) op=func descr="Absolute address"
     LK @(31) op=func descr="Link bit"
-}
+} disp="#LI"
 
-# XO-Form: Inherited from X-Form with overflow enable
-:insn::X_Form XO_Form subfields={
-    OE @(21) op=func descr="Overflow enable"
-    # Note: OE overlaps with XO @(21..30) - this generates a warning
-    # but both fields coexist for different instruction variants
-}
 
-:insn::X_Form add mask={OPCD=31, XO=266, Rc=0} descr="Add (X-Form)"
-:insn::X_Form add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record (X-Form)"
-:insn::XO_Form addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow (XO-Form)"
-:insn::XO_Form addo. mask={OPCD=31, XO=266, OE=1, Rc=1} descr="Add with overflow and record (XO-Form)"
-:insn::D_Form addi mask={OPCD=14} descr="Add immediate (D-Form)"
+
+:insn::X_Form add mask={OPCD=31, XO=266, Rc=0} descr="Add (X-Form)" op="+"
+:insn::X_Form add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record (X-Form)" op="+"
+:insn::XO_Form addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow (XO-Form)" op="+"
+:insn::XO_Form addo. mask={OPCD=31, XO=266, OE=1, Rc=1} descr="Add with overflow and record (XO-Form)" op="+"
+:insn::D_Form addi mask={OPCD=14} descr="Add immediate (D-Form)" op="+"
 :insn::D_Form lwz mask={OPCD=32} descr="Load word and zero (D-Form)"
 :insn::X_Form lwzx mask={OPCD=31, XO=23, Rc=0} descr="Load word and zero indexed (X-Form)"
 :insn::I_Form b mask={OPCD=18, AA=0, LK=0} descr="Branch (I-Form)"
@@ -179,9 +181,9 @@ subfields={
 
 # MOVE instruction with explicit operand override
 # mr (move register) uses X-Form but only needs RT and RA operands
-:insn::X_Form mr (RT, RA) mask={OPCD=31, XO=444, RB=0, Rc=0} descr="Move register (operand override)"
-:insn::XO_Form mullwo mask={OPCD=31, XO=235, OE=1, Rc=0} descr="Multiply low word with overflow"
-:insn::X_Form mullw mask={OPCD=31, XO=235, Rc=0} descr="Multiply low word"
+:insn::X_Form mr (RT, RA) mask={OPCD=31, XO=444, RB=0, Rc=0} descr="Move register (operand override)" disp="#RT<-#RA"
+:insn::XO_Form mullwo mask={OPCD=31, XO=235, OE=1, Rc=0} descr="Multiply low word with overflow" op="*"
+:insn::X_Form mullw mask={OPCD=31, XO=235, Rc=0} descr="Multiply low word" op="*"
 
 # GOOD EXAMPLES: Automatic operand inference
 # These instructions automatically get operands from their form definitions:

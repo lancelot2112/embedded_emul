@@ -477,6 +477,7 @@ mod tests {
                 name: name.to_string(),
                 parent: None,
                 description: None,
+                display: None,
                 subfields: vec![simple_subfield("OPCD")],
                 span: manual_span(),
             }),
@@ -495,6 +496,8 @@ mod tests {
                 mask: None,
                 encoding: None,
                 semantics: None,
+                display: None,
+                operator: None,
                 span: manual_span(),
             }),
         })

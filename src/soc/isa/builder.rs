@@ -56,6 +56,18 @@ impl IsaBuilder {
         parent: Option<String>,
         subfields: impl IntoIterator<Item = SubFieldDecl>,
     ) -> &mut Self {
+        self.add_form_with_display(space, name, parent, None, subfields)
+    }
+
+    /// Appends a form declaration with an optional display template.
+    pub fn add_form_with_display(
+        &mut self,
+        space: impl Into<String>,
+        name: impl Into<String>,
+        parent: Option<String>,
+        display: Option<String>,
+        subfields: impl IntoIterator<Item = SubFieldDecl>,
+    ) -> &mut Self {
         let space = space.into();
         let name = name.into();
         let subfields: Vec<SubFieldDecl> = subfields.into_iter().collect();
@@ -64,6 +76,7 @@ impl IsaBuilder {
             name,
             parent,
             description: None,
+            display,
             subfields,
             span: self.span.clone(),
         };
@@ -90,6 +103,8 @@ impl IsaBuilder {
             mask: None,
             encoding: None,
             semantics: None,
+            display: None,
+            operator: None,
             span: self.span.clone(),
         };
         InstructionBuilder {
@@ -154,6 +169,18 @@ impl<'a> InstructionBuilder<'a> {
     /// Assigns a human-readable description.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.decl.description = Some(description.into());
+        self
+    }
+
+    /// Assigns a display template used during disassembly.
+    pub fn display(mut self, template: impl Into<String>) -> Self {
+        self.decl.display = Some(template.into());
+        self
+    }
+
+    /// Supplies an operator token referenced by display templates.
+    pub fn operator(mut self, op: impl Into<String>) -> Self {
+        self.decl.operator = Some(op.into());
         self
     }
 

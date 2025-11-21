@@ -103,6 +103,7 @@ pub struct FormDecl {
     pub name: String,
     pub parent: Option<String>,
     pub description: Option<String>,
+    pub display: Option<String>,
     pub subfields: Vec<SubFieldDecl>,
     pub span: SourceSpan,
 }
@@ -142,6 +143,8 @@ pub struct InstructionDecl {
     pub mask: Option<MaskSpec>,
     pub encoding: Option<BitFieldSpec>,
     pub semantics: Option<SemanticBlock>,
+    pub display: Option<String>,
+    pub operator: Option<String>,
     pub span: SourceSpan,
 }
 

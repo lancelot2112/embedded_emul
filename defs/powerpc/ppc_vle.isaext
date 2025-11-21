@@ -1,16 +1,19 @@
 :space vle addr=32 type=logic word=16 align=16 endian=big enbl={@(0|3)==0b10}
 
-:vle BD8_Form subfields={
+:vle BD8 subfields={
     OPCD @(0..4) op=func descr="Primary opcode"
-    OPCDx @(0..5) op=func descr="Primary opcode extended"
     BO16 @(5) op=source|$reg::CR descr="CR used as condition of branch"
     BI16 @(6..7) op=func descr="Check true, false, or decrement CTR and branch if not 0"
-    XO @(6) op=func descr="Extended opcode"
-    LK @(7) op=func descr="Link bit"
     BD8 @(?1|8..15|0b0) op=immediate descr="Immediate field concatenated with 0 and sign-extended to 64-bits"
 }
 
+:vle::BD8 BD8x subfields={
+    OPCDx @(0..5) op=func descr="Primary opcode extended"
+    XO @(6) op=func descr="Extended opcode"
+    LK @(7) op=func descr="Link bit"
+}
 
-:vle::BD8_Form se_b (BD8) mask={OPCDx=0x3A, XO=0, LK=0}
-:vle::BD8_Form se_bl (BD8) mask={OPCDx=0x3A, XO=0, LK=1}
-:vle::BD8_Form se_bc (BO16, BI16, BD8) mask={OPCD=0x1C}
+
+:vle::BD8x se_b (BD8) mask={OPCDx=0x3A, XO=0, LK=0}
+:vle::BD8x se_bl (BD8) mask={OPCDx=0x3A, XO=0, LK=1}
+:vle::BD8 se_bc (BO16, BI16, BD8) mask={OPCD=0x1C}
