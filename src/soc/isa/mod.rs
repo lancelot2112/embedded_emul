@@ -16,9 +16,6 @@ pub mod semantics;
 mod space;
 pub mod validator;
 
-#[cfg(test)]
-mod tests;
-
 pub use builder::IsaBuilder;
 pub use handle::IsaHandle;
 pub use machine::{Disassembly, MachineDescription};

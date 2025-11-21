@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::loader::isa::IsaLoader;
+use nanemu::loader::isa::IsaLoader;
 
 #[test]
 fn disassembles_powerpc_vle_stream() {
@@ -35,7 +35,7 @@ fn disassembles_powerpc_vle_stream() {
 
     assert_eq!(listing[0].mnemonic, "addi");
     assert_eq!(listing[0].address, 0x1000);
-    assert_eq!(listing[0].operands, vec!["GPR0", "GPR0", "0"]);
+    assert_eq!(listing[0].operands, vec!["r0", "r0", "0"], "disp formatting should rename registers");
 
     assert_eq!(listing[1].mnemonic, "se_b");
     assert_eq!(listing[1].address, 0x1004);

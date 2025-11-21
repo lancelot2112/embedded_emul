@@ -15,7 +15,7 @@
 :space insn addr=32 word=32 type=logic align=16 endian=big
 
 ##### Registers (in register space) #####
-:reg GPR[0..31] offset=0x0 size=64 reset=0
+:reg GPR[0..31] offset=0x0 size=64 reset=0 disp="r%d"
 subfields={
 #!if endian=big
     msb @(0..31)

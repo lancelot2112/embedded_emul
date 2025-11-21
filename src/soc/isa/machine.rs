@@ -1,6 +1,8 @@
 //! Runtime representation of a validated ISA along with helpers for disassembly and semantics.
 
 use std::collections::BTreeMap;
+use std::iter::Peekable;
+use std::str::Chars;
 
 use crate::soc::device::endianness::Endianness;
 use crate::soc::prog::types::{BitFieldSegment, BitFieldSpec, TypeId};
@@ -460,6 +462,7 @@ impl SpaceInfo {
 pub struct RegisterInfo {
     pub name: String,
     pub range: Option<FieldIndexRange>,
+    display: Option<String>,
 }
 
 impl RegisterInfo {
@@ -467,10 +470,14 @@ impl RegisterInfo {
         Self {
             name: decl.name,
             range: decl.range,
+            display: decl.display,
         }
     }
 
     fn format(&self, value: u64) -> String {
+        if let Some(pattern) = &self.display {
+            return format_register_display(pattern, value);
+        }
         if self.range.is_some() {
             format!("{}{}", self.name, value)
         } else {
@@ -790,6 +797,101 @@ fn mask_for_bits(bits: u32) -> u64 {
         u64::MAX
     } else {
         (1u64 << bits) - 1
+    }
+}
+
+fn format_register_display(pattern: &str, value: u64) -> String {
+    let mut result = String::new();
+    let mut chars = pattern.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '%' {
+            result.push(ch);
+            continue;
+        }
+
+        if matches!(chars.peek(), Some('%')) {
+            chars.next();
+            result.push('%');
+            continue;
+        }
+
+        if let Some(fragment) = next_display_fragment(&mut chars, value) {
+            result.push_str(&fragment);
+        } else {
+            result.push('%');
+        }
+    }
+    result
+}
+
+fn next_display_fragment(iter: &mut Peekable<Chars<'_>>, value: u64) -> Option<String> {
+    let mut zero_pad = false;
+    let mut width_digits = String::new();
+
+    while let Some(&ch) = iter.peek() {
+        if ch == '0' && width_digits.is_empty() {
+            zero_pad = true;
+            iter.next();
+            continue;
+        }
+        if ch.is_ascii_digit() {
+            width_digits.push(ch);
+            iter.next();
+        } else {
+            break;
+        }
+    }
+
+    let width = if width_digits.is_empty() {
+        None
+    } else {
+        width_digits.parse().ok()
+    };
+
+    let spec = iter.next()?;
+    Some(match spec {
+        'd' | 'u' => format_number(value, width, zero_pad, NumberFormat::Decimal),
+        'x' => format_number(value, width, zero_pad, NumberFormat::HexLower),
+        'X' => format_number(value, width, zero_pad, NumberFormat::HexUpper),
+        '%' => "%".into(),
+        other => {
+            let mut literal = String::from("%");
+            if zero_pad {
+                literal.push('0');
+            }
+            if let Some(w) = width {
+                literal.push_str(&w.to_string());
+            }
+            literal.push(other);
+            literal
+        }
+    })
+}
+
+#[derive(Clone, Copy)]
+enum NumberFormat {
+    Decimal,
+    HexLower,
+    HexUpper,
+}
+
+fn format_number(value: u64, width: Option<usize>, zero_pad: bool, format: NumberFormat) -> String {
+    match format {
+        NumberFormat::Decimal => match (width, zero_pad) {
+            (Some(w), true) => format!("{value:0width$}", width = w),
+            (Some(w), false) => format!("{value:width$}", width = w),
+            (None, _) => format!("{value}"),
+        },
+        NumberFormat::HexLower => match (width, zero_pad) {
+            (Some(w), true) => format!("{value:0width$x}", width = w),
+            (Some(w), false) => format!("{value:width$x}", width = w),
+            (None, _) => format!("{value:x}"),
+        },
+        NumberFormat::HexUpper => match (width, zero_pad) {
+            (Some(w), true) => format!("{value:0width$X}", width = w),
+            (Some(w), false) => format!("{value:width$X}", width = w),
+            (None, _) => format!("{value:X}"),
+        },
     }
 }
 
