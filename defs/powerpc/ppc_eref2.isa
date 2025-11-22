@@ -184,7 +184,7 @@ subfields={
 :insn::X_Form add mask={OPCD=31, XO=266, Rc=0} descr="Add (X-Form)" op="+" semantics={ 
     a = $reg::GPR(#RA)  //treat as a read
     b = $reg::GPR(#RB)
-    (res,carry) = $host::add(a,b,#SIZE_MODE)
+    (res,carry) = $host::add_with_carry(a,b,#SIZE_MODE)
     $reg::GPR(#RT) = res
     (res,carry) //returning res, carry in tuple
 }

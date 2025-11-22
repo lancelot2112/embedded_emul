@@ -229,6 +229,24 @@ impl BitFieldSpec {
         self.apply_pad(value, width)
     }
 
+    /// Reads the bitfield and interprets the result as a signed value when the spec demands it.
+    ///
+    /// Consumers like the semantics runtime can rely on this helper to get properly sign-extended
+    /// operands without having to duplicate the padding logic baked into the spec definition.
+    pub fn read_signed(&self, bits: u64) -> i64 {
+        let (value, width) = self.read_bits(bits);
+        if width == 0 {
+            return 0;
+        }
+        if self.is_signed() {
+            let effective = width.min(64);
+            let shift = 64 - effective as u32;
+            ((value << shift) as i64) >> shift
+        } else {
+            value as i64
+        }
+    }
+
     /// Writes the logical field value back into the container bits, returning the updated value.
     pub fn write_bits(&self, mut container: u64, mut value: u64) -> Result<u64, BitFieldError> {
         let total = self.total_width();
@@ -736,5 +754,28 @@ mod tests {
             bits & mask_for_width(3),
             "only range bits should be written back"
         );
+    }
+
+    #[test]
+    fn read_signed_zero_extends_unsigned_specs() {
+        let container = dummy_container(6);
+        let spec = BitFieldSpec::builder(container)
+            .range(4, 4)
+            .finish();
+        let bits = 0x00F0u64; // field is 0xF -> 15
+        let signed = spec.read_signed(bits);
+        assert_eq!(signed, 15, "unsigned specs should zero-extend their values");
+    }
+
+    #[test]
+    fn read_signed_sign_extends_when_requested() {
+        let container = dummy_container(7);
+        let spec = BitFieldSpec::builder(container)
+            .range(4, 4)
+            .pad(PadSpec::new(PadKind::Sign, 60))
+            .finish();
+        let bits = 0x00F0u64; // field is 0xF -> -1 when sign extended
+        let signed = spec.read_signed(bits);
+        assert_eq!(signed, -1, "sign-padded specs should return negative values");
     }
 }
