@@ -6,6 +6,7 @@
 mod disassembly;
 mod format;
 mod host;
+
 mod instruction;
 mod macros;
 mod register;
@@ -21,7 +22,8 @@ pub use space::{FieldEncoding, FormInfo, OperandKind, SpaceInfo, encode_constant
 use std::collections::BTreeMap;
 
 use crate::soc::isa::ast::{
-    FieldDecl, FormDecl, IsaItem, IsaSpecification, MacroDecl, SpaceDecl, SpaceKind, SpaceMember,
+    FieldDecl, FormDecl, IsaItem, IsaSpecification, MacroDecl, ParameterDecl, ParameterValue,
+    SpaceDecl, SpaceKind, SpaceMember,
 };
 use crate::soc::isa::error::IsaError;
 
@@ -33,6 +35,7 @@ pub struct MachineDescription {
     pub instructions: Vec<Instruction>,
     pub spaces: BTreeMap<String, SpaceInfo>,
     pub macros: Vec<MacroInfo>,
+    pub parameters: BTreeMap<String, ParameterValue>,
     patterns: Vec<InstructionPattern>,
     decode_spaces: Vec<LogicDecodeSpace>,
 }
@@ -43,6 +46,7 @@ impl Default for MachineDescription {
             instructions: Vec::new(),
             spaces: BTreeMap::new(),
             macros: Vec::new(),
+            parameters: BTreeMap::new(),
             patterns: Vec::new(),
             decode_spaces: Vec::new(),
         }
@@ -60,6 +64,8 @@ impl MachineDescription {
         let mut fields = Vec::new();
         let mut instructions = Vec::new();
         let mut macros = Vec::new();
+        let mut parameters: BTreeMap<String, ParameterValue> = BTreeMap::new();
+
         for doc in docs {
             for item in doc.items {
                 match item {
@@ -71,6 +77,9 @@ impl MachineDescription {
                     },
                     IsaItem::Instruction(instr) => instructions.push(instr),
                     IsaItem::Macro(mac) => macros.push(mac),
+                    IsaItem::Parameter(ParameterDecl { name, value }) => {
+                        parameters.insert(name, value);
+                    }
                     _ => {}
                 }
             }
@@ -92,6 +101,7 @@ impl MachineDescription {
         for mac in macros {
             machine.register_macro(mac);
         }
+        machine.parameters = parameters;
         machine.build_patterns()?;
         machine.build_decode_spaces()?;
 
@@ -148,7 +158,8 @@ mod tests {
     use super::*;
     use crate::soc::device::endianness::Endianness;
     use crate::soc::isa::ast::{
-        IsaItem, IsaSpecification, MacroDecl, SpaceAttribute, SpaceKind, SubFieldDecl,
+        IsaItem, IsaSpecification, MacroDecl, ParameterValue, SpaceAttribute, SpaceKind,
+        SubFieldDecl,
     };
     use crate::soc::isa::builder::{IsaBuilder, mask_field_selector, subfield_op};
     use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
@@ -288,6 +299,24 @@ mod tests {
             vec!["GPR0".to_string(), "GPR3".to_string(), "GPR2".to_string()]
         );
         assert_eq!(listing[1].display.as_deref(), Some("GPR0 <-> GPR3"));
+    }
+
+    #[test]
+    fn machine_description_preserves_parameters() {
+        let mut builder = IsaBuilder::new("params.isa");
+        builder.add_parameter("SIZE_MODE", ParameterValue::Number(32));
+        builder.add_parameter("ENDIAN", ParameterValue::Word("big".into()));
+        let doc = builder.build();
+        let machine = MachineDescription::from_documents(vec![doc]).expect("machine");
+        assert_eq!(machine.parameters.len(), 2);
+        assert!(matches!(
+            machine.parameters.get("SIZE_MODE"),
+            Some(ParameterValue::Number(32))
+        ));
+        assert!(matches!(
+            machine.parameters.get("ENDIAN"),
+            Some(ParameterValue::Word(value)) if value == "big"
+        ));
     }
 
     #[test]

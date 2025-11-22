@@ -7,7 +7,8 @@ use std::path::PathBuf;
 
 use crate::soc::isa::ast::{
     FormDecl, InstructionDecl, IsaItem, IsaSpecification, MaskField, MaskSelector, MaskSpec,
-    SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember, SpaceMemberDecl, SubFieldDecl, SubFieldOp,
+    ParameterDecl, ParameterValue, SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember,
+    SpaceMemberDecl, SubFieldDecl, SubFieldOp,
 };
 use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
 
@@ -28,6 +29,20 @@ impl IsaBuilder {
             span,
             items: Vec::new(),
         }
+    }
+
+    /// Appends a top-level parameter declaration.
+    pub fn add_parameter(
+        &mut self,
+        name: impl Into<String>,
+        value: ParameterValue,
+    ) -> &mut Self {
+        let decl = ParameterDecl {
+            name: name.into(),
+            value,
+        };
+        self.items.push(IsaItem::Parameter(decl));
+        self
     }
 
     /// Appends a space declaration with the provided attributes.

@@ -1,38 +1,55 @@
 //! Intermediate representation for semantic blocks embedded in `.isa` files.
 
+use std::sync::Arc;
+
+use crate::soc::isa::error::IsaError;
+
+pub mod bindings;
+pub mod program;
+pub mod runtime;
+
+pub use bindings::{OperandBinder, ParameterBindings};
+pub use program::SemanticProgram;
+
 /// A semantic block captures the original source plus any parsed operations.
 #[derive(Debug, Clone)]
 pub struct SemanticBlock {
     /// Raw source extracted from the `.isa` file between `{` and `}`.
     pub source: String,
-    /// Structured operations (unused for now, but reserved for future lowering passes).
-    pub ops: Vec<SemanticOp>,
+    compiled: Option<Arc<SemanticProgram>>,
 }
 
 impl SemanticBlock {
-    pub fn new(source: String, ops: Vec<SemanticOp>) -> Self {
-        Self { source, ops }
+    pub fn new(source: String) -> Self {
+        Self {
+            source,
+            compiled: None,
+        }
     }
 
     pub fn from_source(source: String) -> Self {
-        Self::new(source, Vec::new())
+        Self::new(source)
     }
 
     pub fn empty() -> Self {
         Self::from_source(String::new())
     }
-}
 
-#[derive(Debug, Clone)]
-pub enum SemanticOp {
-    Assign {
-        target: String,
-        expr: SemanticExpr,
-    },
-    Call {
-        func: String,
-        args: Vec<SemanticExpr>,
-    },
+    pub fn set_program(&mut self, program: SemanticProgram) {
+        self.compiled = Some(Arc::new(program));
+    }
+
+    pub fn program(&self) -> Option<&Arc<SemanticProgram>> {
+        self.compiled.as_ref()
+    }
+
+    pub fn ensure_program(&mut self) -> Result<&Arc<SemanticProgram>, IsaError> {
+        if self.compiled.is_none() {
+            let program = SemanticProgram::parse(&self.source)?;
+            self.compiled = Some(Arc::new(program));
+        }
+        Ok(self.compiled.as_ref().expect("program must exist"))
+    }
 }
 
 #[derive(Debug, Clone)]

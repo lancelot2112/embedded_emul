@@ -22,6 +22,7 @@ impl SemanticRuntime {
 pub enum SemanticValue {
     Int(i64),
     Bool(bool),
+    Word(String),
     Tuple(Vec<SemanticValue>),
 }
 
@@ -34,6 +35,10 @@ impl SemanticValue {
         Self::Bool(value)
     }
 
+    pub fn word(value: impl Into<String>) -> Self {
+        Self::Word(value.into())
+    }
+
     pub fn tuple(values: Vec<SemanticValue>) -> Self {
         Self::Tuple(values)
     }
@@ -42,6 +47,9 @@ impl SemanticValue {
         match self {
             SemanticValue::Int(value) => Ok(*value),
             SemanticValue::Bool(value) => Ok(if *value { 1 } else { 0 }),
+            SemanticValue::Word(_) => Err(IsaError::Machine(
+                "word value cannot be coerced to integer".into(),
+            )),
             SemanticValue::Tuple(_) => Err(IsaError::Machine(
                 "tuple value cannot be coerced to integer".into(),
             )),
@@ -52,9 +60,20 @@ impl SemanticValue {
         match self {
             SemanticValue::Bool(value) => Ok(*value),
             SemanticValue::Int(value) => Ok(*value != 0),
+            SemanticValue::Word(_) => Err(IsaError::Machine(
+                "word value cannot be coerced to boolean".into(),
+            )),
             SemanticValue::Tuple(_) => Err(IsaError::Machine(
                 "tuple value cannot be coerced to boolean".into(),
             )),
+        }
+    }
+
+    pub fn as_word(&self) -> Option<&str> {
+        if let SemanticValue::Word(value) = self {
+            Some(value.as_str())
+        } else {
+            None
         }
     }
 
@@ -154,6 +173,14 @@ mod tests {
         let number = SemanticValue::int(-42);
         assert_eq!(number.as_int().unwrap(), -42);
         assert!(number.as_bool().unwrap());
+    }
+
+    #[test]
+    fn word_values_do_not_cast_to_scalar() {
+        let word = SemanticValue::word("big");
+        assert!(word.as_int().is_err());
+        assert!(word.as_bool().is_err());
+        assert_eq!(word.as_word(), Some("big"));
     }
 
     #[test]
