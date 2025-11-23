@@ -11,7 +11,8 @@ use crate::soc::isa::error::IsaError;
 use crate::soc::isa::machine::{
     MachineDescription, RegisterElement, RegisterFieldMetadata, RegisterMetadata, RegisterSchema,
 };
-use crate::soc::isa::semantics::program::RegisterRef;
+use crate::soc::isa::semantics::expression::{ContextCallResolver, ExpressionEvaluator};
+use crate::soc::isa::semantics::program::{ContextCall, ContextKind, Expr, RegisterRef};
 use crate::soc::core::state::{CoreState, StateError};
 use crate::soc::isa::ast::ContextReference;
 use crate::soc::prog::types::arena::TypeArena;
@@ -32,6 +33,20 @@ impl SemanticRuntime {
         machine: &'machine MachineDescription,
     ) -> RegisterAccess<'machine> {
         RegisterAccess::new(machine)
+    }
+
+    /// Evaluates a semantic expression using the provided execution context and core state.
+    pub fn evaluate_expression<'ctx>(
+        &self,
+        machine: &MachineDescription,
+        state: &mut CoreState,
+        context: &ExecutionContext<'ctx>,
+        expr: &Expr,
+    ) -> Result<SemanticValue, IsaError> {
+        let registers = self.register_access(machine);
+        let resolver = RuntimeCallResolver::new(registers, state);
+        let mut evaluator = ExpressionEvaluator::with_resolver(context, resolver);
+        evaluator.evaluate(expr)
     }
 }
 
@@ -380,6 +395,64 @@ impl<'machine> RegisterAccess<'machine> {
     }
 }
 
+struct RuntimeCallResolver<'machine, 'state> {
+    registers: RegisterAccess<'machine>,
+    state: &'state mut CoreState,
+}
+
+impl<'machine, 'state> RuntimeCallResolver<'machine, 'state> {
+    fn new(registers: RegisterAccess<'machine>, state: &'state mut CoreState) -> Self {
+        Self { registers, state }
+    }
+
+    fn evaluate_register_call(
+        &mut self,
+        call: &ContextCall,
+        args: Vec<SemanticValue>,
+    ) -> Result<SemanticValue, IsaError> {
+        if args.len() > 1 {
+            return Err(IsaError::Machine(format!(
+                "register call '${}::{}' accepts at most one argument",
+                call.space, call.name
+            )));
+        }
+        if call.subpath.len() > 1 {
+            return Err(IsaError::Machine(format!(
+                "register call '${}::{}' cannot reference nested subfields",
+                call.space, call.name
+            )));
+        }
+        let index = match args.first() {
+            Some(value) => Some(value.as_int()?),
+            None => None,
+        };
+        let reference = RegisterRef {
+            space: call.space.clone(),
+            name: call.name.clone(),
+            subfield: call.subpath.first().cloned(),
+            index: None,
+        };
+        let resolved = self.registers.resolve(&reference, index)?;
+        resolved.read(self.state)
+    }
+}
+
+impl<'machine, 'state> ContextCallResolver for RuntimeCallResolver<'machine, 'state> {
+    fn evaluate_context_call(
+        &mut self,
+        call: &ContextCall,
+        args: Vec<SemanticValue>,
+    ) -> Result<SemanticValue, IsaError> {
+        match call.kind {
+            ContextKind::Register => self.evaluate_register_call(call, args),
+            _ => Err(IsaError::Machine(format!(
+                "context call '${}::{}' is not supported yet",
+                call.space, call.name
+            ))),
+        }
+    }
+}
+
 /// Fully resolved register reference ready for read/write operations.
 pub struct ResolvedRegister<'schema> {
     name: String,
@@ -511,6 +584,7 @@ mod tests {
     };
     use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
     use crate::soc::isa::machine::MachineDescription;
+    use crate::soc::isa::semantics::program::{ContextCall, ContextKind, Expr};
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -687,6 +761,31 @@ mod tests {
         let resolved = access.resolve(&reference, None).expect("resolve label");
         let value = resolved.read(&mut state).expect("read gpr0");
         assert_eq!(value.as_int().unwrap(), 0xFEED);
+    }
+
+    #[test]
+    fn evaluate_expression_reads_register_calls() {
+        let (runtime, machine, mut state) = test_runtime_state();
+        state
+            .write_register("reg::GPR1", 0x1234)
+            .expect("seed gpr1");
+
+        let mut params = HashMap::new();
+        params.insert("idx".into(), SemanticValue::int(1));
+        let ctx = ExecutionContext::new(&params);
+
+        let expr = Expr::Call(ContextCall {
+            kind: ContextKind::Register,
+            space: "reg".into(),
+            name: "GPR".into(),
+            subpath: Vec::new(),
+            args: vec![Expr::Parameter("idx".into())],
+        });
+
+        let value = runtime
+            .evaluate_expression(&machine, &mut state, &ctx, &expr)
+            .expect("evaluate expr");
+        assert_eq!(value.as_int().unwrap(), 0x1234);
     }
 
     fn test_runtime_state() -> (SemanticRuntime, MachineDescription, CoreState) {
