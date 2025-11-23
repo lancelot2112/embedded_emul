@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::soc::isa::error::IsaError;
 
 pub mod bindings;
+pub mod expression;
 pub mod program;
 pub mod runtime;
 
