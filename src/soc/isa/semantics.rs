@@ -1,6 +1,6 @@
 //! Intermediate representation for semantic blocks embedded in `.isa` files.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crate::soc::isa::error::IsaError;
 
@@ -20,14 +20,14 @@ pub use program::SemanticProgram;
 pub struct SemanticBlock {
     /// Raw source extracted from the `.isa` file between `{` and `}`.
     pub source: String,
-    compiled: Option<Arc<SemanticProgram>>,
+    compiled: OnceLock<Arc<SemanticProgram>>,
 }
 
 impl SemanticBlock {
     pub fn new(source: String) -> Self {
         Self {
             source,
-            compiled: None,
+            compiled: OnceLock::new(),
         }
     }
 
@@ -40,19 +40,22 @@ impl SemanticBlock {
     }
 
     pub fn set_program(&mut self, program: SemanticProgram) {
-        self.compiled = Some(Arc::new(program));
+        let _ = self.compiled.set(Arc::new(program));
     }
 
     pub fn program(&self) -> Option<&Arc<SemanticProgram>> {
-        self.compiled.as_ref()
+        self.compiled.get()
     }
 
-    pub fn ensure_program(&mut self) -> Result<&Arc<SemanticProgram>, IsaError> {
-        if self.compiled.is_none() {
-            let program = SemanticProgram::parse(&self.source)?;
-            self.compiled = Some(Arc::new(program));
+    pub fn ensure_program(&self) -> Result<&Arc<SemanticProgram>, IsaError> {
+        if let Some(program) = self.compiled.get() {
+            return Ok(program);
         }
-        Ok(self.compiled.as_ref().expect("program must exist"))
+        let program = SemanticProgram::parse(&self.source)?;
+        let _ = self.compiled.set(Arc::new(program));
+        self.compiled
+            .get()
+            .ok_or_else(|| IsaError::Machine("failed to store compiled program".into()))
     }
 }
 

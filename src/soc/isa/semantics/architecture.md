@@ -122,7 +122,7 @@ When finishing `runtime.rs`, keep these dependencies in mind: parse once, evalua
     - Tests: mini-programs exercising variable assignment, tuple returns, and side-effect-only expressions (e.g., macros updating flags).
 
 6. **Call Dispatch**
-    - Implement `$host::`, `$macro::`, `$insn::`, and register calls with recursion/stack checks.
+    - Implement `$host::`, `$macro::`, `$<logicspacetag>::`, and register calls with recursion/stack checks.
     - Tests: host helper invocation (`add_with_carry`), macro chaining (e.g., `add.` calling `add` then CR update), and instruction-to-instruction reuse.
 
 7. **Integration Harness**
