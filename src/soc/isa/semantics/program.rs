@@ -359,7 +359,9 @@ impl<'src> Parser<'src> {
             return Ok(Expr::Variable(lexeme));
         }
 
-        Err(IsaError::Parser("unexpected token in semantic expression".into()))
+        Err(IsaError::Parser(
+            "unexpected token in semantic expression".into(),
+        ))
     }
 
     fn parse_argument_list(&mut self) -> Result<Vec<Expr>, IsaError> {
@@ -519,9 +521,8 @@ fn parse_bit_slice(spec: &str) -> Result<BitSlice, IsaError> {
         .next()
         .ok_or_else(|| IsaError::Parser("bit slice missing start".into()))?;
     let end = parts.next();
-    let start_val = parse_u64_literal(start).map_err(|err| {
-        IsaError::Parser(format!("invalid bit slice start '{}': {err}", start))
-    })?;
+    let start_val = parse_u64_literal(start)
+        .map_err(|err| IsaError::Parser(format!("invalid bit slice start '{}': {err}", start)))?;
     let end_val = if let Some(end_str) = end {
         parse_u64_literal(end_str).map_err(|err| {
             IsaError::Parser(format!("invalid bit slice end '{}': {err}", end_str))

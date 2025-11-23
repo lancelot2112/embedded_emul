@@ -47,13 +47,8 @@ pub trait HostServices {
     fn add(&mut self, lhs: u64, rhs: u64, width: u32) -> HostArithResult;
 
     /// Adds two values plus an incoming carry/borrow flag.
-    fn add_with_carry(
-        &mut self,
-        lhs: u64,
-        rhs: u64,
-        carry_in: bool,
-        width: u32,
-    ) -> HostArithResult;
+    fn add_with_carry(&mut self, lhs: u64, rhs: u64, carry_in: bool, width: u32)
+    -> HostArithResult;
 
     /// Subtracts `rhs` from `lhs` within the provided bit width.
     fn sub(&mut self, lhs: u64, rhs: u64, width: u32) -> HostArithResult;

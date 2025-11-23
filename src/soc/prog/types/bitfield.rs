@@ -759,9 +759,7 @@ mod tests {
     #[test]
     fn read_signed_zero_extends_unsigned_specs() {
         let container = dummy_container(6);
-        let spec = BitFieldSpec::builder(container)
-            .range(4, 4)
-            .finish();
+        let spec = BitFieldSpec::builder(container).range(4, 4).finish();
         let bits = 0x00F0u64; // field is 0xF -> 15
         let signed = spec.read_signed(bits);
         assert_eq!(signed, 15, "unsigned specs should zero-extend their values");
@@ -776,6 +774,9 @@ mod tests {
             .finish();
         let bits = 0x00F0u64; // field is 0xF -> -1 when sign extended
         let signed = spec.read_signed(bits);
-        assert_eq!(signed, -1, "sign-padded specs should return negative values");
+        assert_eq!(
+            signed, -1,
+            "sign-padded specs should return negative values"
+        );
     }
 }

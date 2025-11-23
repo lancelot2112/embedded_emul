@@ -8,13 +8,15 @@ use std::str::Chars;
 use std::sync::Arc;
 
 use crate::soc::device::Endianness;
-use crate::soc::isa::ast::{ContextReference, FieldDecl, FieldIndexRange, SpaceKind, SubFieldDecl, SubFieldOp};
+use crate::soc::isa::ast::{
+    ContextReference, FieldDecl, FieldIndexRange, SpaceKind, SubFieldDecl, SubFieldOp,
+};
 use crate::soc::isa::error::IsaError;
-use crate::soc::prog::symbols::{SymbolHandle, SymbolKind, SymbolTable, StorageClass};
+use crate::soc::prog::symbols::{StorageClass, SymbolHandle, SymbolKind, SymbolTable};
+use crate::soc::prog::types::record::{LayoutSize, MemberRecord};
 use crate::soc::prog::types::{
     AggregateKind, BitFieldSpec, DisplayFormat, ScalarEncoding, TypeArena, TypeBuilder, TypeId,
 };
-use crate::soc::prog::types::record::{LayoutSize, MemberRecord};
 
 use super::space::SpaceInfo;
 
@@ -473,7 +475,12 @@ fn build_register_entry(
         )));
     }
     let container = *scalar_cache.entry(bit_width).or_insert_with(|| {
-        builder.scalar(None, element_bytes(bit_width), ScalarEncoding::Unsigned, DisplayFormat::Hex)
+        builder.scalar(
+            None,
+            element_bytes(bit_width),
+            ScalarEncoding::Unsigned,
+            DisplayFormat::Hex,
+        )
     });
     let (fields, members) = build_register_fields(builder, container, bit_width, space_name, info)?;
     let layout = LayoutSize {
@@ -528,12 +535,13 @@ fn build_register_fields(
         return Ok((fields, members));
     }
     for sub in &info.subfields {
-        let spec = BitFieldSpec::from_spec_str(container, bit_width as u16, &sub.bit_spec).map_err(|err| {
-            IsaError::Machine(format!(
-                "invalid bit spec '{}' on register '{}::{}::{}': {err}",
-                sub.bit_spec, space, info.name, sub.name
-            ))
-        })?;
+        let spec = BitFieldSpec::from_spec_str(container, bit_width as u16, &sub.bit_spec)
+            .map_err(|err| {
+                IsaError::Machine(format!(
+                    "invalid bit spec '{}' on register '{}::{}::{}': {err}",
+                    sub.bit_spec, space, info.name, sub.name
+                ))
+            })?;
         let width = spec.data_width();
         let offset = spec.bit_span().map(|(start, _)| start as u32).unwrap_or(0);
         let name_id = Some(builder.intern(&sub.name));
@@ -549,8 +557,7 @@ fn build_register_fields(
 }
 
 fn register_count(info: &RegisterInfo) -> u32 {
-    info
-        .range
+    info.range
         .as_ref()
         .map(|range| (range.end - range.start) + 1)
         .unwrap_or(1)

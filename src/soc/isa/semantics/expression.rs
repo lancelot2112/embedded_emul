@@ -5,8 +5,9 @@
 //! are handled by the runtime once execution plumbing lands.
 
 use crate::soc::isa::error::IsaError;
+use crate::soc::isa::semantics::context::ExecutionContext;
 use crate::soc::isa::semantics::program::{BitSlice, ContextCall, Expr, ExprBinaryOp};
-use crate::soc::isa::semantics::runtime::{ExecutionContext, SemanticValue};
+use crate::soc::isa::semantics::value::SemanticValue;
 
 /// Resolves `$context::foo()` style expressions when evaluating semantic IR.
 pub trait ContextCallResolver {
@@ -173,12 +174,7 @@ where
         Ok(SemanticValue::int(op(left, right)))
     }
 
-    fn int_compare<F>(
-        &mut self,
-        lhs: &Expr,
-        rhs: &Expr,
-        cmp: F,
-    ) -> Result<SemanticValue, IsaError>
+    fn int_compare<F>(&mut self, lhs: &Expr, rhs: &Expr, cmp: F) -> Result<SemanticValue, IsaError>
     where
         F: FnOnce(i64, i64) -> bool,
     {
@@ -298,8 +294,6 @@ mod tests {
             args: Vec::new(),
         });
         let err = evaluator.evaluate(&expr).expect_err("call should error");
-        assert!(
-            matches!(err, IsaError::Machine(msg) if msg.contains("requires runtime dispatch"))
-        );
+        assert!(matches!(err, IsaError::Machine(msg) if msg.contains("requires runtime dispatch")));
     }
 }

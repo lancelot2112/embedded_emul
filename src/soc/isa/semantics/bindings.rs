@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 use crate::soc::isa::ast::ParameterValue;
 use crate::soc::isa::error::IsaError;
 use crate::soc::isa::machine::FormInfo;
-use crate::soc::isa::semantics::runtime::SemanticValue;
+use crate::soc::isa::semantics::value::SemanticValue;
 use crate::soc::prog::types::BitFieldSpec;
 
 #[derive(Debug, Clone)]
@@ -42,7 +42,10 @@ impl OperandBinder {
                 .map(|name| name.as_str())
                 .collect()
         } else {
-            instruction_operands.iter().map(|name| name.as_str()).collect()
+            instruction_operands
+                .iter()
+                .map(|name| name.as_str())
+                .collect()
         };
 
         let mut bindings = Vec::with_capacity(operand_names.len());
@@ -77,14 +80,14 @@ impl OperandBinder {
 
     /// Reports how many operands will be produced.
     pub fn len(&self) -> usize {
-            self.bindings.len()
-        }
+        self.bindings.len()
     }
+}
 
-    impl ParameterBindings {
-        pub fn new() -> Self {
-            Self::default()
-        }
+impl ParameterBindings {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     pub fn insert_value(
         &mut self,
@@ -119,9 +122,7 @@ impl OperandBinder {
         match value {
             ParameterValue::Number(raw) => {
                 let signed = i64::try_from(*raw).map_err(|_| {
-                    IsaError::Machine(format!(
-                        "parameter '{name}' exceeds 64-bit signed range"
-                    ))
+                    IsaError::Machine(format!("parameter '{name}' exceeds 64-bit signed range"))
                 })?;
                 self.insert_int(name, signed);
             }
@@ -195,15 +196,13 @@ mod tests {
         let mut form = FormInfo::new("X_FORM".into());
         form.push_field(subfield("RT", 0, 5, OperandKind::Register));
         form.push_field(subfield("RA", 5, 5, OperandKind::Register));
-        form.push_field(
-            FieldEncoding {
-                spec: BitFieldSpec::builder(TypeId::from_index(0))
-                    .range(10, 16)
-                    .signed(true)
-                    .finish(),
-                ..subfield("IMM", 10, 16, OperandKind::Immediate)
-            },
-        );
+        form.push_field(FieldEncoding {
+            spec: BitFieldSpec::builder(TypeId::from_index(0))
+                .range(10, 16)
+                .signed(true)
+                .finish(),
+            ..subfield("IMM", 10, 16, OperandKind::Immediate)
+        });
 
         let binder = OperandBinder::from_form(&form, &[]).expect("binder");
         assert_eq!(binder.len(), 3);

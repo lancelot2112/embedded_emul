@@ -5,9 +5,12 @@ use std::sync::Arc;
 use crate::soc::isa::error::IsaError;
 
 pub mod bindings;
+pub mod context;
 pub mod expression;
 pub mod program;
+pub mod register;
 pub mod runtime;
+pub mod value;
 
 pub use bindings::{OperandBinder, ParameterBindings};
 pub use program::SemanticProgram;

@@ -32,11 +32,7 @@ impl IsaBuilder {
     }
 
     /// Appends a top-level parameter declaration.
-    pub fn add_parameter(
-        &mut self,
-        name: impl Into<String>,
-        value: ParameterValue,
-    ) -> &mut Self {
+    pub fn add_parameter(&mut self, name: impl Into<String>, value: ParameterValue) -> &mut Self {
         let decl = ParameterDecl {
             name: name.into(),
             value,
