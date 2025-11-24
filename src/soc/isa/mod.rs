@@ -18,4 +18,4 @@ pub mod validator;
 
 pub use builder::IsaBuilder;
 pub use handle::IsaHandle;
-pub use machine::{Disassembly, MachineDescription};
+pub use machine::{DecodedInstruction, Disassembly, MachineDescription};

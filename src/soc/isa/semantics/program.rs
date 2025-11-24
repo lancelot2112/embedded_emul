@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::loader::isa::lexer::{Lexer, Token, TokenKind};
+use crate::soc::isa::diagnostic::SourceSpan;
 use crate::soc::isa::error::IsaError;
 use crate::soc::prog::types::parse_u64_literal;
 
@@ -11,7 +12,11 @@ pub struct SemanticProgram {
 
 impl SemanticProgram {
     pub fn parse(source: &str) -> Result<Self, IsaError> {
-        let mut parser = Parser::new(source);
+        Self::parse_with_span(source, None)
+    }
+
+    pub fn parse_with_span(source: &str, span: Option<&SourceSpan>) -> Result<Self, IsaError> {
+        let mut parser = Parser::with_span(source, span);
         parser.parse_program()
     }
 }
@@ -100,9 +105,14 @@ struct Parser<'src> {
 }
 
 impl<'src> Parser<'src> {
-    fn new(source: &'src str) -> Self {
+    fn with_span(source: &'src str, span: Option<&SourceSpan>) -> Self {
+        let (path, line, column) = if let Some(span) = span {
+            (span.path.clone(), span.start.line, span.start.column)
+        } else {
+            (PathBuf::from("<semantics>"), 1, 0)
+        };
         Self {
-            lexer: Lexer::new(source, PathBuf::from("<semantics>")),
+            lexer: Lexer::with_origin(source, path, line, column),
             peeked: None,
         }
     }
@@ -142,7 +152,7 @@ impl<'src> Parser<'src> {
 
     fn parse_logical_or(&mut self) -> Result<Expr, IsaError> {
         let mut expr = self.parse_logical_and()?;
-        while self.match_double(TokenKind::Pipe)? {
+        while self.match_token(TokenKind::DoublePipe)? {
             let rhs = self.parse_logical_and()?;
             expr = Expr::BinaryOp {
                 op: ExprBinaryOp::LogicalOr,
@@ -155,7 +165,7 @@ impl<'src> Parser<'src> {
 
     fn parse_logical_and(&mut self) -> Result<Expr, IsaError> {
         let mut expr = self.parse_bit_or()?;
-        while self.match_double(TokenKind::Ampersand)? {
+        while self.match_token(TokenKind::DoubleAmpersand)? {
             let rhs = self.parse_bit_or()?;
             expr = Expr::BinaryOp {
                 op: ExprBinaryOp::LogicalAnd,
@@ -208,7 +218,7 @@ impl<'src> Parser<'src> {
     fn parse_equality(&mut self) -> Result<Expr, IsaError> {
         let mut expr = self.parse_relational()?;
         loop {
-            if self.match_double(TokenKind::Equals)? {
+            if self.match_token(TokenKind::DoubleEquals)? {
                 let rhs = self.parse_relational()?;
                 expr = Expr::BinaryOp {
                     op: ExprBinaryOp::Eq,
@@ -217,7 +227,7 @@ impl<'src> Parser<'src> {
                 };
                 continue;
             }
-            if self.match_bang_equals()? {
+            if self.match_token(TokenKind::BangEquals)? {
                 let rhs = self.parse_relational()?;
                 expr = Expr::BinaryOp {
                     op: ExprBinaryOp::Ne,
@@ -411,33 +421,6 @@ impl<'src> Parser<'src> {
     fn match_token(&mut self, kind: TokenKind) -> Result<bool, IsaError> {
         if self.check(kind.clone())? {
             self.consume()?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    fn match_double(&mut self, kind: TokenKind) -> Result<bool, IsaError> {
-        if self.check(kind.clone())? {
-            let first = self.consume()?;
-            if self.check(kind.clone())? {
-                self.consume()?;
-                Ok(true)
-            } else {
-                return Err(IsaError::Parser(format!(
-                    "operator '{}' requires repeating token",
-                    first.lexeme
-                )));
-            }
-        } else {
-            Ok(false)
-        }
-    }
-
-    fn match_bang_equals(&mut self) -> Result<bool, IsaError> {
-        if self.check(TokenKind::Bang)? {
-            self.consume()?;
-            self.expect(TokenKind::Equals, "'=' after '!' for '!='")?;
             Ok(true)
         } else {
             Ok(false)

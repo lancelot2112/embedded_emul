@@ -5,7 +5,6 @@ use crate::soc::system::bus::error::BusError;
 
 /// Represents any failure that can occur while loading, parsing, validating, or executing ISA
 /// artifacts.
-#[derive(Debug)]
 pub enum IsaError {
     Io(std::io::Error),
     Parser(String),
@@ -52,3 +51,9 @@ impl fmt::Display for IsaError {
 }
 
 impl std::error::Error for IsaError {}
+
+impl fmt::Debug for IsaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self}")
+    }
+}

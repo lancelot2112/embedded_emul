@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::soc::isa::ast::{IsaSpecification, SpaceKind};
-use crate::soc::isa::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
+use crate::soc::isa::diagnostic::{
+    DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourcePosition, SourceSpan,
+};
 use crate::soc::isa::error::IsaError;
 use crate::soc::isa::semantics::SemanticBlock;
 
@@ -111,7 +113,7 @@ impl<'src> Parser<'src> {
         &mut self,
         context: &str,
     ) -> Result<SemanticBlock, IsaError> {
-        self.expect(TokenKind::LBrace, &format!("'{{' to start {context}"))?;
+        let open = self.expect(TokenKind::LBrace, &format!("'{{' to start {context}"))?;
         let captured = self.lexer.capture_braced_block()?;
         let closing = Token {
             kind: TokenKind::RBrace,
@@ -120,7 +122,12 @@ impl<'src> Parser<'src> {
             column: captured.end_column,
         };
         self.last_token = Some(closing);
-        Ok(SemanticBlock::from_source(captured.body))
+        let span = SourceSpan::new(
+            self.path.clone(),
+            SourcePosition::new(open.line, open.column),
+            SourcePosition::new(captured.end_line, captured.end_column),
+        );
+        Ok(SemanticBlock::with_span(captured.body, Some(span)))
     }
 }
 

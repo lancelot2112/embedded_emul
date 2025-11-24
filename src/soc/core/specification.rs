@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::convert::TryFrom;
 
 use crate::soc::device::Endianness;
 use crate::soc::isa::ast::SpaceKind;
@@ -170,13 +171,54 @@ impl CoreSpec {
             }
             let default_bits = space.size_bits.unwrap_or(DEFAULT_REGISTER_BITS);
             for info in space.registers.values() {
+                if info.redirect.is_some() {
+                    continue;
+                }
                 let width = register_bit_width(info, default_bits);
-                let register_name = format!("{}::{}", space_name, info.name);
-                builder = builder.register(register_name, width);
+                if let Some(range) = &info.range {
+                    for (ordinal, index) in (range.start..=range.end).enumerate() {
+                        let label = info.format(index as u64);
+                        builder = append_register(
+                            builder,
+                            space_name,
+                            &label,
+                            width,
+                            info.offset,
+                            ordinal as u32,
+                        );
+                    }
+                } else {
+                    let label = info.format(0);
+                    builder = append_register(builder, space_name, &label, width, info.offset, 0);
+                }
             }
         }
         builder.build()
     }
+}
+
+fn append_register(
+    builder: CoreSpecBuilder,
+    space: &str,
+    label: &str,
+    width: u32,
+    offset_bytes: Option<u64>,
+    ordinal: u32,
+) -> CoreSpecBuilder {
+    let name = format!("{}::{}", space, label);
+    if let Some(bit_offset) = register_bit_offset(offset_bytes, ordinal, width) {
+        builder.register_at(name, bit_offset, width)
+    } else {
+        builder.register(name, width)
+    }
+}
+
+fn register_bit_offset(offset_bytes: Option<u64>, ordinal: u32, width: u32) -> Option<u32> {
+    let base = offset_bytes?;
+    let base_bits = base.checked_mul(8)?;
+    let ordinal_bits = (ordinal as u64).checked_mul(width as u64)?;
+    let total = base_bits.checked_add(ordinal_bits)?;
+    u32::try_from(total).ok()
 }
 
 fn register_space_endianness(machine: &MachineDescription) -> Option<Endianness> {

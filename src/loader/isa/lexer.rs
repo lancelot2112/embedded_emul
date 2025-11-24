@@ -40,16 +40,20 @@ pub enum TokenKind {
     LessThan,
     GreaterThan,
     Pipe,
+    DoublePipe,
     Equals,
+    DoubleEquals,
     Comma,
     Semicolon,
     Question,
     Dash,
     Plus,
     Bang,
+    BangEquals,
     Percent,
     Caret,
     Ampersand,
+    DoubleAmpersand,
     Asterisk,
     Slash,
     Tilde,
@@ -87,12 +91,25 @@ pub struct Lexer<'src> {
 
 impl<'src> Lexer<'src> {
     pub fn new(src: &'src str, path: PathBuf) -> Self {
+        Self::with_origin(src, path, 1, 0)
+    }
+
+    /// Creates a lexer whose first token will be reported as starting at the provided
+    /// line/column pair. `start_column` is interpreted as the number of characters that have
+    /// already been consumed on the starting line, so passing the column position of the last
+    /// consumed character will ensure the next character is reported at column+1.
+    pub fn with_origin(
+        src: &'src str,
+        path: PathBuf,
+        start_line: usize,
+        start_column: usize,
+    ) -> Self {
         Self {
             src,
             path,
             offset: 0,
-            line: 1,
-            column: 0,
+            line: start_line,
+            column: start_column,
         }
     }
 
@@ -118,8 +135,8 @@ impl<'src> Lexer<'src> {
             '<' => Ok(self.consume_single(TokenKind::LessThan)),
             '>' => Ok(self.consume_single(TokenKind::GreaterThan)),
             '[' => self.consume_range_token(),
-            '|' => Ok(self.consume_single(TokenKind::Pipe)),
-            '=' => Ok(self.consume_single(TokenKind::Equals)),
+            '|' => Ok(self.consume_pipe()),
+            '=' => Ok(self.consume_equals()),
             ',' => Ok(self.consume_single(TokenKind::Comma)),
             ';' => Ok(self.consume_single(TokenKind::Semicolon)),
             '@' => self.consume_bit_expr(),
@@ -138,10 +155,10 @@ impl<'src> Lexer<'src> {
                 }
             }
             '+' => Ok(self.consume_single(TokenKind::Plus)),
-            '!' => Ok(self.consume_single(TokenKind::Bang)),
+            '!' => Ok(self.consume_bang()),
             '%' => Ok(self.consume_single(TokenKind::Percent)),
             '^' => Ok(self.consume_single(TokenKind::Caret)),
-            '&' => Ok(self.consume_single(TokenKind::Ampersand)),
+            '&' => Ok(self.consume_ampersand()),
             '*' => Ok(self.consume_single(TokenKind::Asterisk)),
             '/' => {
                 if self.peek_next_char() == Some('/') {
@@ -286,6 +303,54 @@ impl<'src> Lexer<'src> {
         self.advance_char();
         self.advance_char();
         self.make_token_from_span(TokenKind::DirectTo, start, self.offset, line, column)
+    }
+
+    fn consume_pipe(&mut self) -> Token {
+        let start = self.offset;
+        let (line, column) = self.position();
+        self.advance_char();
+        if self.peek_char() == Some('|') {
+            self.advance_char();
+            self.make_token_from_span(TokenKind::DoublePipe, start, self.offset, line, column)
+        } else {
+            self.make_token_from_span(TokenKind::Pipe, start, self.offset, line, column)
+        }
+    }
+
+    fn consume_ampersand(&mut self) -> Token {
+        let start = self.offset;
+        let (line, column) = self.position();
+        self.advance_char();
+        if self.peek_char() == Some('&') {
+            self.advance_char();
+            self.make_token_from_span(TokenKind::DoubleAmpersand, start, self.offset, line, column)
+        } else {
+            self.make_token_from_span(TokenKind::Ampersand, start, self.offset, line, column)
+        }
+    }
+
+    fn consume_equals(&mut self) -> Token {
+        let start = self.offset;
+        let (line, column) = self.position();
+        self.advance_char();
+        if self.peek_char() == Some('=') {
+            self.advance_char();
+            self.make_token_from_span(TokenKind::DoubleEquals, start, self.offset, line, column)
+        } else {
+            self.make_token_from_span(TokenKind::Equals, start, self.offset, line, column)
+        }
+    }
+
+    fn consume_bang(&mut self) -> Token {
+        let start = self.offset;
+        let (line, column) = self.position();
+        self.advance_char();
+        if self.peek_char() == Some('=') {
+            self.advance_char();
+            self.make_token_from_span(TokenKind::BangEquals, start, self.offset, line, column)
+        } else {
+            self.make_token_from_span(TokenKind::Bang, start, self.offset, line, column)
+        }
     }
 
     fn consume_bit_expr(&mut self) -> Result<Token, IsaError> {

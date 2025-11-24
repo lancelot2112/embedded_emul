@@ -23,6 +23,42 @@ pub struct Disassembly {
     pub display: Option<String>,
 }
 
+/// Lightweight decoding entry that retains references to the matched instruction
+/// and its operand metadata so downstream components (like the semantics harness)
+/// can inspect the raw bits instead of stringified operands.
+pub struct DecodedInstruction<'a> {
+    address: u64,
+    bits: u64,
+    instruction: &'a Instruction,
+    pattern: &'a InstructionPattern,
+}
+
+impl<'a> DecodedInstruction<'a> {
+    pub fn address(&self) -> u64 {
+        self.address
+    }
+
+    pub fn bits(&self) -> u64 {
+        self.bits
+    }
+
+    pub fn instruction(&self) -> &'a Instruction {
+        self.instruction
+    }
+
+    pub fn operand_names(&self) -> &'a [String] {
+        &self.pattern.operand_names
+    }
+
+    pub fn space(&self) -> &'a str {
+        &self.pattern.space
+    }
+
+    pub fn form_name(&self) -> Option<&'a str> {
+        self.pattern.form.as_deref()
+    }
+}
+
 impl MachineDescription {
     pub fn disassemble_from(&self, bytes: &[u8], base_address: u64) -> Vec<Disassembly> {
         if self.decode_spaces.is_empty() {
@@ -68,6 +104,42 @@ impl MachineDescription {
         }
 
         listing
+    }
+
+    pub fn decode_instructions(
+        &self,
+        bytes: &[u8],
+        base_address: u64,
+    ) -> Vec<DecodedInstruction<'_>> {
+        if self.decode_spaces.is_empty() {
+            return Vec::new();
+        }
+        let mut cursor = 0usize;
+        let mut address = base_address;
+        let mut entries = Vec::new();
+        while cursor < bytes.len() {
+            let remaining = &bytes[cursor..];
+            let Some(space) = self.select_space(remaining) else {
+                break;
+            };
+            if remaining.len() < space.word_bytes {
+                break;
+            }
+            let chunk = &remaining[..space.word_bytes];
+            let bits = decode_word(chunk, space.endianness) & space.mask;
+            if let Some(pattern) = self.best_match(&space.name, bits) {
+                let instr = &self.instructions[pattern.instruction_idx];
+                entries.push(DecodedInstruction {
+                    address,
+                    bits,
+                    instruction: instr,
+                    pattern,
+                });
+            }
+            cursor += space.word_bytes;
+            address += space.word_bytes as u64;
+        }
+        entries
     }
 
     pub fn build_patterns(&mut self) -> Result<(), IsaError> {

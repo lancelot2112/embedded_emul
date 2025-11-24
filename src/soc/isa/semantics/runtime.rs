@@ -110,8 +110,7 @@ impl SemanticRuntime {
     ) -> Result<Option<SemanticValue>, IsaError> {
         match stmt {
             SemanticStmt::Assign { target, expr } => {
-                let value =
-                    self.evaluate_expression(machine, state, host, stack, context, expr)?;
+                let value = self.evaluate_expression(machine, state, host, stack, context, expr)?;
                 self.assign_target(machine, state, host, stack, context, target, value)?;
                 Ok(None)
             }
@@ -120,8 +119,7 @@ impl SemanticRuntime {
                 Ok(None)
             }
             SemanticStmt::Return(expr) => {
-                let value =
-                    self.evaluate_expression(machine, state, host, stack, context, expr)?;
+                let value = self.evaluate_expression(machine, state, host, stack, context, expr)?;
                 Ok(Some(value))
             }
         }
@@ -183,8 +181,7 @@ impl SemanticRuntime {
         reference: &RegisterRef,
     ) -> Result<Option<i64>, IsaError> {
         if let Some(expr) = &reference.index {
-            let value =
-                self.evaluate_expression(machine, state, host, stack, context, expr)?;
+            let value = self.evaluate_expression(machine, state, host, stack, context, expr)?;
             Ok(Some(value.as_int()?))
         } else {
             Ok(None)
@@ -308,10 +305,7 @@ impl<'runtime, 'machine, 'state, 'host, 'stack>
                 .iter()
                 .find(|mac| mac.name == call.name)
                 .ok_or_else(|| {
-                    IsaError::Machine(format!(
-                        "unknown macro '${}::{}'",
-                        call.space, call.name
-                    ))
+                    IsaError::Machine(format!("unknown macro '${}::{}'", call.space, call.name))
                 })?;
             let program = info.semantics.ensure_program()?.clone();
             (info.parameters.clone(), program)
@@ -447,12 +441,7 @@ impl<'runtime, 'machine, 'state, 'host, 'stack>
         ]))
     }
 
-    fn arity_error(
-        &self,
-        call: &ContextCall,
-        expected: usize,
-        actual: usize,
-    ) -> IsaError {
+    fn arity_error(&self, call: &ContextCall, expected: usize, actual: usize) -> IsaError {
         IsaError::Machine(format!(
             "call '${}::{}' expects {expected} arguments, got {actual}",
             call.space, call.name
@@ -591,12 +580,12 @@ mod tests {
     use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
     use crate::soc::isa::error::IsaError;
     use crate::soc::isa::machine::{MachineDescription, SoftwareHost};
+    use crate::soc::isa::semantics::SemanticBlock;
     use crate::soc::isa::semantics::program::{
         AssignTarget, ContextCall, ContextKind, Expr, ExprBinaryOp, RegisterRef, SemanticProgram,
         SemanticStmt,
     };
     use crate::soc::isa::semantics::value::SemanticValue;
-    use crate::soc::isa::semantics::SemanticBlock;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;

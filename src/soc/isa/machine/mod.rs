@@ -12,7 +12,7 @@ mod macros;
 mod register;
 mod space;
 
-pub use disassembly::Disassembly;
+pub use disassembly::{DecodedInstruction, Disassembly};
 pub use host::{HostArithResult, HostMulResult, HostServices, SoftwareHost};
 pub use instruction::{Instruction, InstructionMask};
 pub use macros::MacroInfo;
@@ -115,6 +115,7 @@ impl MachineDescription {
         machine.build_patterns()?;
         machine.build_decode_spaces()?;
         machine.rebuild_register_schema()?;
+        machine.compile_semantics()?;
 
         Ok(machine)
     }
@@ -166,6 +167,18 @@ impl MachineDescription {
     fn rebuild_register_schema(&mut self) -> Result<(), IsaError> {
         let schema = RegisterSchema::build(&mut self.spaces)?;
         self.register_schema = Arc::new(schema);
+        Ok(())
+    }
+
+    fn compile_semantics(&self) -> Result<(), IsaError> {
+        for mac in &self.macros {
+            mac.semantics.ensure_program()?;
+        }
+        for instr in &self.instructions {
+            if let Some(block) = &instr.semantics {
+                block.ensure_program()?;
+            }
+        }
         Ok(())
     }
 }
