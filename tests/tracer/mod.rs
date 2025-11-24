@@ -3,6 +3,7 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use crate::common;
 use nanemu::soc::core::ExecutionHarness;
 use nanemu::soc::isa::machine::MachineDescription;
 use nanemu::soc::isa::semantics::trace::{ExecutionTracer, HostOpKind, TraceEvent};
@@ -25,6 +26,7 @@ impl ExecutionTracer for RecordingTracer {
 
 #[test]
 fn tracer_captures_fetch_aliases_and_bit_widths() {
+    let _lock = common::serial();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/tracer");
     let coredef = root.join("tracer.coredef");
     let mut harness =

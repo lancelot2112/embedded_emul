@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::common;
 use nanemu::loader::isa::IsaLoader;
 use nanemu::soc::core::ExecutionHarness;
 use nanemu::soc::isa::machine::{MachineDescription, SoftwareHost};
@@ -7,6 +8,7 @@ use nanemu::soc::isa::semantics::trace::PipelinePrinter;
 
 #[test]
 fn disassembles_powerpc_vle_stream() {
+    let _lock = common::serial();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut loader = IsaLoader::new();
@@ -61,10 +63,14 @@ fn disassembles_powerpc_vle_stream() {
 
 #[test]
 fn executes_powerpc_add() {
+    let _lock = common::serial();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    seed_base_gprs(&mut harness);
+    harness
+        .write("reg::r3", 0x7FFF_FFFF as u128)
+        .expect("seed r3");
+    harness.write("reg::r4", 1 as u128).expect("seed r4");
 
     let rom = assemble_block(harness.machine(), &["add r5, r3, r4"]);
     let executions = harness
@@ -82,10 +88,14 @@ fn executes_powerpc_add() {
 
 #[test]
 fn executes_powerpc_add_record_sets_cr0() {
+    let _lock = common::serial();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    seed_base_gprs(&mut harness);
+    harness
+        .write("reg::r3", 0x7FFF_FFFF as u128)
+        .expect("seed r3");
+    harness.write("reg::r4", 1 as u128).expect("seed r4");
 
     let rom = assemble_block(harness.machine(), &["add r5, r3, r4", "add. r6, r5, r4"]);
     let executions = harness
@@ -100,6 +110,19 @@ fn executes_powerpc_add_record_sets_cr0() {
         .expect("read r6");
     assert_eq!(r6 as u32, 0x8000_0001);
 
+    check_cr0(&mut harness, 0, 0, 0);
+}
+
+fn check_cr0(
+    harness: &mut ExecutionHarness<SoftwareHost>,
+    exp_neg: i64,
+    exp_pos: i64,
+    exp_zero: i64,
+) {
+    let raw = harness
+        .state_mut()
+        .read_register("reg::CR0")
+        .expect("CR0 raw");
     let neg = harness
         .read_register_value("reg", "CR0", Some("NEG"), None)
         .expect("CR0::NEG")
@@ -115,102 +138,92 @@ fn executes_powerpc_add_record_sets_cr0() {
         .expect("CR0::ZERO")
         .as_int()
         .expect("zero int");
-    assert_eq!(neg, 0);
-    assert_eq!(pos, 0);
-    assert_eq!(zero, 0);
+    assert_eq!(
+        neg, exp_neg,
+        "CR0::NEG should be {exp_neg}, got {neg} (raw=0x{raw:X})"
+    );
+    assert_eq!(
+        pos, exp_pos,
+        "CR0::POS should be {exp_pos}, got {pos} (raw=0x{raw:X})"
+    );
+    assert_eq!(
+        zero, exp_zero,
+        "CR0::ZERO should be {exp_zero}, got {zero} (raw=0x{raw:X})"
+    );
 }
 
 #[test]
 fn executes_powerpc_add_with_overflow() {
+    let _lock = common::serial();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    seed_overflow_gprs(&mut harness);
     harness
-        .write_register_value("reg", "XER", None, None, 0)
-        .expect("clear XER");
+        .write("reg::r3", 0xFFFF_FFFF as u128)
+        .expect("seed r3");
+    harness.write("reg::r4", 1 as u128).expect("seed r4");
+    harness.write("reg::XER", 0).expect("clear XER");
 
-    let rom = assemble_block(harness.machine(), &["addo r7, r3, r3"]);
+    let rom = assemble_block(harness.machine(), &["addo r7, r3, r4"]);
     let executions = harness
         .execute_block(0x8000_1000, &rom)
         .expect("execute addo");
     assert_eq!(executions.len(), 1);
     assert_eq!(executions[0].mnemonic, "addo");
 
-    let r7 = harness
-        .state_mut()
-        .read_register("reg::r7")
-        .expect("read r7");
-    assert_eq!(r7 as u32, 0xFFFF_FFFE);
+    let r7 = harness.read("reg::r7").expect("read r7");
+    assert_eq!(r7 as u32, 0);
 
-    let xer_ov = harness
-        .read_register_value("reg", "XER", Some("OV"), None)
-        .expect("XER::OV")
-        .as_int()
-        .expect("ov int");
-    let xer_so = harness
-        .read_register_value("reg", "XER", Some("SO"), None)
-        .expect("XER::SO")
-        .as_int()
-        .expect("so int");
-    assert_eq!(xer_ov, 0, "addo should leave overflow clear");
-    assert_eq!(xer_so, 0, "addo should leave summary overflow clear");
+    check_summary_overflow(&mut harness, true, true, false);
 }
 
 #[test]
 fn executes_powerpc_add_with_overflow_and_record() {
+    let _lock = common::serial();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    seed_overflow_gprs(&mut harness);
     harness
-        .write_register_value("reg", "XER", None, None, 0)
-        .expect("clear XER");
+        .write("reg::r3", 0xFFFF_FFFF as u128)
+        .expect("seed r3");
+    harness.write("reg::r4", 1 as u128).expect("seed r4");
+    harness.write("reg::XER", 0).expect("clear XER");
 
-    let rom = assemble_block(harness.machine(), &["addo r7, r3, r3", "addo. r8, r7, r4"]);
+    let rom = assemble_block(harness.machine(), &["addo. r8, r3, r4"]);
     let executions = harness
         .execute_block(0x8000_1000, &rom)
         .expect("execute addo.");
-    assert_eq!(executions.len(), 2);
-    assert_eq!(executions[1].mnemonic, "addo.");
+    assert_eq!(executions.len(), 1);
+    assert_eq!(executions[0].mnemonic, "addo.");
 
-    let r8 = harness
-        .state_mut()
-        .read_register("reg::r8")
-        .expect("read r8");
-    assert_eq!(r8 as u32, 0xFFFF_FFFF);
+    let r8 = harness.read("reg::r8").expect("read r8");
+    assert_eq!(r8 as u32, 0);
 
-    let neg = harness
-        .read_register_value("reg", "CR0", Some("NEG"), None)
-        .expect("CR0::NEG")
-        .as_int()
-        .expect("neg int");
-    let pos = harness
-        .read_register_value("reg", "CR0", Some("POS"), None)
-        .expect("CR0::POS")
-        .as_int()
-        .expect("pos int");
-    let zero = harness
-        .read_register_value("reg", "CR0", Some("ZERO"), None)
-        .expect("CR0::ZERO")
-        .as_int()
-        .expect("zero int");
-    assert_eq!(neg, 0);
-    assert_eq!(pos, 0);
-    assert_eq!(zero, 0);
+    check_summary_overflow(&mut harness, true, true, true);
+    check_cr0(&mut harness, 0, 0, 0);
+}
 
-    let cr_so = harness
-        .read_register_value("reg", "CR0", Some("SO"), None)
-        .expect("CR0::SO")
-        .as_int()
-        .expect("so int");
-    let xer_so = harness
-        .read_register_value("reg", "XER", Some("SO"), None)
-        .expect("XER::SO")
-        .as_int()
-        .expect("so int");
-    assert_eq!(cr_so, xer_so, "addo. should mirror XER::SO into CR0");
-    assert_eq!(cr_so, 0, "addo. should leave summary overflow clear");
+fn check_summary_overflow(
+    harness: &mut ExecutionHarness<SoftwareHost>,
+    exp_xer_ov: bool,
+    exp_xer_so: bool,
+    exp_cr_so: bool,
+) {
+    let xer_ov = harness.read("reg::XER::OV").expect("read XER::OV") == 1;
+    let cr_so = harness.read("reg::CR0::SO").expect("read CR0::SO") == 1;
+    let xer_so = harness.read("reg::XER::SO").expect("read XER::SO") == 1;
+    assert_eq!(
+        xer_ov, exp_xer_ov,
+        "overflow should be {exp_xer_ov}, (ov={xer_ov}, cr_so={cr_so},  xer_so={xer_so})"
+    );
+    assert_eq!(
+        xer_so, exp_xer_so,
+        "summary overflow should be {exp_xer_so}, (ov={xer_ov}, cr_so={cr_so}, xer_so={xer_so})"
+    );
+    assert_eq!(
+        cr_so, exp_cr_so,
+        "CR summary overflow should be {exp_cr_so}, (ov={xer_ov}, cr_so={cr_so}, xer_so={xer_so})"
+    );
 }
 
 fn enable_trace_if_requested(harness: &mut ExecutionHarness<SoftwareHost>) {
@@ -224,22 +237,6 @@ fn build_powerpc_harness(coredef: &PathBuf) -> ExecutionHarness<SoftwareHost> {
         ExecutionHarness::from_coredef("ppc-e200", coredef, None).expect("construct harness");
     enable_trace_if_requested(&mut harness);
     harness
-}
-
-fn seed_base_gprs(harness: &mut ExecutionHarness<SoftwareHost>) {
-    let state = harness.state_mut();
-    state
-        .write_register("reg::r3", 0x7FFF_FFFF)
-        .expect("seed r3");
-    state.write_register("reg::r4", 1).expect("seed r4");
-}
-
-fn seed_overflow_gprs(harness: &mut ExecutionHarness<SoftwareHost>) {
-    let state = harness.state_mut();
-    state
-        .write_register("reg::r3", 0x7FFF_FFFF)
-        .expect("seed r3");
-    state.write_register("reg::r4", 1).expect("seed r4");
 }
 
 fn assemble_block(machine: &MachineDescription, lines: &[&str]) -> Vec<u8> {

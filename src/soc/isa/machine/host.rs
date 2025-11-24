@@ -44,8 +44,7 @@ impl HostMulResult {
 /// Trait describing the primitive helpers surfaced to the semantics DSL.
 pub trait HostServices {
     /// Adds two unsigned values using the provided bit width.
-    fn add(&mut self, lhs: u64, rhs: u64, carry_in: bool, width: u32)
-    -> HostArithResult;
+    fn add(&mut self, lhs: u64, rhs: u64, carry_in: bool, width: u32) -> HostArithResult;
 
     /// Subtracts `rhs` from `lhs` within the provided bit width.
     fn sub(&mut self, lhs: u64, rhs: u64, borrow_in: bool, width: u32) -> HostArithResult;

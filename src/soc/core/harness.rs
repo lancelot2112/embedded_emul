@@ -196,6 +196,21 @@ impl<H: HostServices> ExecutionHarness<H> {
         Ok(())
     }
 
+    pub fn read(&mut self, register: &str) -> Result<u128, HarnessError> {
+        let reference = Self::parse_register_reference(register)?;
+        let registers = self.runtime.register_access(&self.machine);
+        let resolved = registers.resolve(&reference, None)?;
+        Ok(resolved.read_bits(&mut self.state)?)
+    }
+
+    pub fn write(&mut self, register: &str, value: u128) -> Result<(), HarnessError> {
+        let reference = Self::parse_register_reference(register)?;
+        let registers = self.runtime.register_access(&self.machine);
+        let resolved = registers.resolve(&reference, None)?;
+        resolved.write_bits(&mut self.state, value)?;
+        Ok(())
+    }
+
     pub fn execute_block(
         &mut self,
         base_address: u64,
@@ -273,5 +288,47 @@ impl<H: HostServices> ExecutionHarness<H> {
             }
         }
         Ok(bindings.into_inner())
+    }
+}
+
+impl<H: HostServices> ExecutionHarness<H> {
+    fn parse_register_reference(register: &str) -> Result<RegisterRef, HarnessError> {
+        let trimmed = register.trim();
+        let mut parts = trimmed.split("::");
+        let space = parts
+            .next()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                HarnessError::Isa(IsaError::Machine(format!(
+                    "register reference '{register}' missing space prefix"
+                )))
+            })?;
+        let name = parts
+            .next()
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                HarnessError::Isa(IsaError::Machine(format!(
+                    "register reference '{register}' missing name"
+                )))
+            })?;
+        let subfield = match parts.next() {
+            Some(val) if !val.is_empty() => {
+                if parts.next().is_some() {
+                    return Err(HarnessError::Isa(IsaError::Machine(format!(
+                        "register reference '{register}' has too many segments"
+                    ))));
+                }
+                Some(val.to_string())
+            }
+            Some(_) => None,
+            None => None,
+        };
+        Ok(RegisterRef {
+            space: space.to_string(),
+            name: name.to_string(),
+            subfield,
+            index: None,
+            span: None,
+        })
     }
 }

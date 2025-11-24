@@ -414,9 +414,7 @@ impl<'runtime, 'machine, 'state, 'host, 'stack>
         let rhs = args[1].as_int()?;
         let carry_in = args[2].as_bool()?;
         let width = self.parse_width(&args[3], call)?;
-        let result = self
-            .host
-            .add(lhs as u64, rhs as u64, carry_in, width);
+        let result = self.host.add(lhs as u64, rhs as u64, carry_in, width);
         self.runtime.emit_trace(TraceEvent::HostOp {
             op: HostOpKind::Add,
             args: vec![lhs, rhs, carry_in as i64],
@@ -838,7 +836,12 @@ mod tests {
                         space: "host".into(),
                         name: "add".into(),
                         subpath: Vec::new(),
-                        args: vec![Expr::Number(5), Expr::Number(7), Expr::Number(0), Expr::Number(32)],
+                        args: vec![
+                            Expr::Number(5),
+                            Expr::Number(7),
+                            Expr::Number(0),
+                            Expr::Number(32),
+                        ],
                         span: helper_span(),
                     }),
                 },

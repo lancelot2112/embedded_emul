@@ -99,7 +99,10 @@ impl<W: Write> ExecutionTracer for PipelinePrinter<W> {
                         rhs = args[1]
                     ));
                 } else {
-                    self.writeln(&format!("[IntOp]   {op:?} {:?} -> 0x{result:016X}", args));
+                    self.writeln(&format!(
+                        "[IntOp]   {op} [{args}] -> 0x{result:016X}",
+                        args = format_arg_list(&args)
+                    ));
                 }
             }
         }
@@ -117,4 +120,11 @@ fn format_value(value: i64, bits: u32) -> String {
         (value as u64) & mask
     };
     format!("0x{masked:0width$X}")
+}
+
+fn format_arg_list(args: &[i64]) -> String {
+    args.iter()
+        .map(|value| format!("0x{value:X}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
