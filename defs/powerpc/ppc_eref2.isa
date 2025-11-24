@@ -189,11 +189,11 @@ subfields={
     (res,carry) //returning res, carry in tuple
 }
 :insn::X_Form add. mask={OPCD=31, XO=266, Rc=1} descr="Add and record (X-Form)" op="+" semantics={
-    $insn::add(#RT,#RA,#RB)    // We want all the mutation effects of "add"
+    (res, carry) = $insn::add(#RT,#RA,#RB)    // We want all the mutation effects of "add"
     $macro::upd_cr0(res)        // plus we want to update our CR0 registers
 }
 :insn::XO_Form addo mask={OPCD=31, XO=266, OE=1, Rc=0} descr="Add with overflow (XO-Form)" op="+" semantics={
-    $insn::add(#RT,#RA,#RB)
+    (res,carry) = $insn::add(#RT,#RA,#RB)
     $macro::upd_xer_int(res,carry)
 }
 :insn::XO_Form addo. mask={OPCD=31, XO=266, OE=1, Rc=1} descr="Add with overflow and record (XO-Form)" op="+" semantics={
