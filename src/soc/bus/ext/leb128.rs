@@ -1,6 +1,6 @@
 //! LEB128 read/write helpers reused by symbol and loader tooling.
 
-use crate::soc::system::bus::{BusResult, DataHandle, ext::int::IntDataHandleExt};
+use crate::soc::bus::{BusResult, DataHandle, ext::int::IntDataHandleExt};
 
 pub trait Leb128DataHandleExt {
     fn read_uleb128(&mut self) -> BusResult<u64>;
@@ -45,7 +45,7 @@ impl Leb128DataHandleExt for DataHandle {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Device, Endianness};
-    use crate::soc::system::bus::DeviceBus;
+    use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {

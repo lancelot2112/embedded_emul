@@ -1,6 +1,6 @@
 pub mod address;
 pub mod data;
-mod device_bus;
+pub mod device_bus;
 pub mod error;
 pub mod ext;
 pub mod range;

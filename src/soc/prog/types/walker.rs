@@ -9,7 +9,7 @@ use super::record::{MemberRecord, TypeRecord};
 #[derive(Clone, Debug)]
 pub struct ResolvedMember<'a> {
     pub record: &'a MemberRecord,
-    pub absolute_offset_bits: u32,
+    pub absolute_offset_bits: usize,
 }
 
 pub struct TypeWalker<'arena> {
@@ -30,7 +30,7 @@ impl<'arena> TypeWalker<'arena> {
 struct CursorFrame<'a> {
     members: &'a [MemberRecord],
     index: usize,
-    base_offset_bits: u32,
+    base_offset_bits: usize,
 }
 
 pub struct MemberCursor<'arena> {
@@ -48,7 +48,7 @@ impl<'arena> MemberCursor<'arena> {
         cursor
     }
 
-    fn push_type(&mut self, ty: TypeId, base_offset_bits: u32) {
+    fn push_type(&mut self, ty: TypeId, base_offset_bits: usize) {
         if let TypeRecord::Aggregate(AggregateType { members, .. }) = self.arena.get(ty) {
             let slice = self.arena.members(*members);
             self.stack.push(CursorFrame {

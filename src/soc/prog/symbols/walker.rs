@@ -11,27 +11,27 @@ use crate::soc::prog::types::sequence::SequenceType;
 /// Enumerates the primitive leaf shapes emitted by the walker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValueKind {
-    Unsigned { bytes: u32 },
-    Signed { bytes: u32 },
+    Unsigned { bytes: usize },
+    Signed { bytes: usize },
     Float32,
     Float64,
-    Utf8 { bytes: u32 },
+    Utf8 { bytes: usize },
     Enum,
     Fixed,
-    Pointer { bytes: u32, target: TypeId },
+    Pointer { bytes: usize, target: TypeId },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymbolWalkEntry {
     pub ty: TypeId,
     pub path: SymbolPath,
-    pub offset_bits: u64,
-    pub bit_len: u32,
+    pub offset_bits: usize,
+    pub bit_len: usize,
     pub kind: ValueKind,
 }
 
 impl SymbolWalkEntry {
-    pub fn byte_len(&self) -> u32 {
+    pub fn byte_len(&self) -> usize {
         self.bit_len.div_ceil(8)
     }
 }
@@ -44,7 +44,7 @@ pub struct SymbolPath {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PathSegment {
     Member(Option<StringId>),
-    Index(u32),
+    Index(usize),
 }
 
 impl SymbolPath {
@@ -60,7 +60,7 @@ impl SymbolPath {
         next
     }
 
-    pub fn push_index(&self, index: u32) -> Self {
+    pub fn push_index(&self, index: usize) -> Self {
         let mut next = self.clone();
         next.segments.push(PathSegment::Index(index));
         next
@@ -100,7 +100,7 @@ impl SymbolPath {
 #[derive(Clone, Debug)]
 struct FrameState {
     ty: TypeId,
-    offset_bits: u64,
+    offset_bits: usize,
     path: SymbolPath,
 }
 
@@ -125,9 +125,9 @@ impl<'arena> SymbolWalker<'arena> {
         let Some(count) = sequence.element_count() else {
             return;
         };
-        let stride = (sequence.stride_bytes as u64) * 8;
+        let stride = (sequence.stride_bytes) * 8;
         for index in (0..count).rev() {
-            let offset_bits = frame.offset_bits + (index as u64) * stride;
+            let offset_bits = frame.offset_bits + (index) * stride;
             self.stack.push(FrameState {
                 ty: sequence.element,
                 offset_bits,
@@ -142,7 +142,7 @@ impl<'arena> SymbolWalker<'arena> {
         }
         let members = self.arena.members(aggregate.members);
         for member in members.iter().rev() {
-            let offset_bits = frame.offset_bits + member.offset_bits as u64;
+            let offset_bits = frame.offset_bits + member.offset_bits as usize;
             let path = frame.path.push_member(member.name_id);
             self.stack.push(FrameState {
                 ty: member.ty,
@@ -206,9 +206,9 @@ impl<'arena> Iterator for SymbolWalker<'arena> {
                         ty: frame.ty,
                         path: frame.path,
                         offset_bits: frame.offset_bits,
-                        bit_len: bitfield.total_width() as u32,
+                        bit_len: bitfield.total_width() as usize,
                         kind: ValueKind::Unsigned {
-                            bytes: (bitfield.total_width() as u32).div_ceil(8),
+                            bytes: (bitfield.total_width() as usize).div_ceil(8),
                         },
                     });
                 }
@@ -248,13 +248,13 @@ fn walk_scalar(ty: TypeId, scalar: &ScalarType, frame: &FrameState) -> Option<Sy
     })
 }
 
-fn scalar_bits(ty: TypeId, arena: &TypeArena) -> Option<u32> {
+fn scalar_bits(ty: TypeId, arena: &TypeArena) -> Option<usize> {
     match arena.get(ty) {
         TypeRecord::Scalar(scalar) => Some(scalar.byte_size * 8),
         TypeRecord::Enum(enum_type) => Some(enum_type.base.byte_size * 8),
         TypeRecord::Fixed(fixed) => Some(fixed.base.byte_size * 8),
         TypeRecord::Pointer(pointer) => Some(pointer.byte_size * 8),
-        TypeRecord::BitField(bitfield) => Some(bitfield.total_width() as u32),
+        TypeRecord::BitField(bitfield) => Some(bitfield.total_width() as usize),
         _ => None,
     }
 }

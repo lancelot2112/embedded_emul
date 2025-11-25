@@ -5,9 +5,9 @@ pub type DeviceResult<T> = Result<T, DeviceError>;
 #[derive(Debug)]
 pub enum DeviceError {
     OutOfRange {
-        offset: u64,
-        len: u64,
-        capacity: u64,
+        offset: usize,
+        len: usize,
+        capacity: usize,
     },
     Unsupported(&'static str),
     Backend(Box<dyn Error + Send + Sync>),

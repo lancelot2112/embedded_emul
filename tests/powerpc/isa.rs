@@ -68,9 +68,9 @@ fn executes_powerpc_add() {
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
     harness
-        .write("reg::r3", 0x7FFF_FFFF as u128)
+        .write("reg::r3", 0x7FFF_FFFF)
         .expect("seed r3");
-    harness.write("reg::r4", 1 as u128).expect("seed r4");
+    harness.write("reg::r4", 1).expect("seed r4");
 
     let rom = assemble_block(harness.machine(), &["add r5, r3, r4"]);
     let executions = harness
@@ -93,9 +93,9 @@ fn executes_powerpc_add_record_sets_cr0() {
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
     harness
-        .write("reg::r3", 0x7FFF_FFFF as u128)
+        .write("reg::r3", 0x7FFF_FFFF)
         .expect("seed r3");
-    harness.write("reg::r4", 1 as u128).expect("seed r4");
+    harness.write("reg::r4", 1).expect("seed r4");
 
     let rom = assemble_block(harness.machine(), &["add r5, r3, r4", "add. r6, r5, r4"]);
     let executions = harness
@@ -126,7 +126,7 @@ fn executes_powerpc_add_record_sets_cr0() {
 
 fn get_cr0(
     harness: &mut ExecutionHarness<SoftwareHost>,
-) -> (bool, bool, bool, u128) {
+) -> (bool, bool, bool, u64) {
     let raw = harness.read("reg::CR0")
         .expect("CR0 raw");
     let neg = harness
@@ -148,9 +148,9 @@ fn executes_powerpc_add_with_overflow() {
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
     harness
-        .write("reg::r3", 0xFFFF_FFFF as u128)
+        .write("reg::r3", 0xFFFF_FFFF)
         .expect("seed r3");
-    harness.write("reg::r4", 1 as u128).expect("seed r4");
+    harness.write("reg::r4", 1).expect("seed r4");
     harness.write("reg::XER", 0).expect("clear XER");
 
     let rom = assemble_block(harness.machine(), &["addo r7, r3, r4"]);
@@ -173,9 +173,9 @@ fn executes_powerpc_add_with_overflow_and_record() {
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
     harness
-        .write("reg::r3", 0xFFFF_FFFF as u128)
+        .write("reg::r3", 0xFFFF_FFFF)
         .expect("seed r3");
-    harness.write("reg::r4", 1 as u128).expect("seed r4");
+    harness.write("reg::r4", 1).expect("seed r4");
     harness.write("reg::XER", 0).expect("clear XER");
 
     let rom = assemble_block(harness.machine(), &["addo. r8, r3, r4"]);

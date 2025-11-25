@@ -23,7 +23,7 @@ pub enum DisplayFormat {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScalarType {
     pub name_id: Option<StringId>,
-    pub byte_size: u32,
+    pub byte_size: usize,
     pub encoding: ScalarEncoding,
     pub display: DisplayFormat,
 }
@@ -31,7 +31,7 @@ pub struct ScalarType {
 impl ScalarType {
     pub fn new(
         name_id: Option<StringId>,
-        byte_size: u32,
+        byte_size: usize,
         encoding: ScalarEncoding,
         display: DisplayFormat,
     ) -> Self {
@@ -54,8 +54,8 @@ impl ScalarType {
     }
 }
 
-fn format_dot_notation(value: u64, byte_size: u32) -> String {
-    let mut parts = Vec::with_capacity(byte_size as usize);
+fn format_dot_notation(value: u64, byte_size: usize) -> String {
+    let mut parts = Vec::with_capacity(byte_size);
     for idx in (0..byte_size).rev() {
         let shift = idx * 8;
         parts.push(((value >> shift) & 0xFF) as u8);

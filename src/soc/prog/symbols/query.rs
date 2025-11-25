@@ -10,8 +10,8 @@ pub struct SymbolQuery<'a> {
     binding: Option<SymbolBinding>,
     label: Option<LabelId>,
     source: Option<SymbolSource>,
-    runtime_addr: Option<u64>,
-    file_addr: Option<u64>,
+    runtime_addr: Option<usize>,
+    file_addr: Option<usize>,
 }
 
 impl<'a> SymbolQuery<'a> {
@@ -41,12 +41,12 @@ impl<'a> SymbolQuery<'a> {
         self
     }
 
-    pub fn runtime_addr(mut self, addr: u64) -> Self {
+    pub fn runtime_addr(mut self, addr: usize) -> Self {
         self.runtime_addr = Some(addr);
         self
     }
 
-    pub fn file_addr(mut self, addr: u64) -> Self {
+    pub fn file_addr(mut self, addr: usize) -> Self {
         self.file_addr = Some(addr);
         self
     }
@@ -73,8 +73,8 @@ pub struct SymbolQueryIter<'a> {
     binding: Option<SymbolBinding>,
     label: Option<LabelId>,
     source: Option<SymbolSource>,
-    runtime_addr: Option<u64>,
-    file_addr: Option<u64>,
+    runtime_addr: Option<usize>,
+    file_addr: Option<usize>,
     index: usize,
 }
 

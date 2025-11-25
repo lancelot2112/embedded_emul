@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::soc::system::bus::{DataHandle, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{DataHandle, ext::stream::ByteDataHandleExt};
 
 use super::error::IsaError;
 use super::machine::{Disassembly, MachineDescription};
@@ -27,7 +27,7 @@ impl IsaHandle {
         len: usize,
     ) -> Result<Vec<Disassembly>, IsaError> {
         let mut buf = vec![0u8; len];
-        data.read_bytes(&mut buf)?;
+        data.stream_out(&mut buf)?;
         Ok(self.machine.disassemble(&buf))
     }
 

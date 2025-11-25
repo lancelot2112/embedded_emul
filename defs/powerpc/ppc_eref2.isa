@@ -204,10 +204,9 @@ subfields={
     $macro::upd_cr0(res)
 }
 
-
 //EREF 2.0 Rev.0 pg.5-13
 :insn::XO_Form addc mask={OPCD=31, XO=10, OE=0, Rc=0} descr="Add carrying" op="+" semantics={
-
+    (res, carry) = $insn::add(#RT, #RA, #RB)
 }
 
 //EREF 2.0 REV.0 pg.5-15

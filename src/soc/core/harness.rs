@@ -196,14 +196,14 @@ impl<H: HostServices> ExecutionHarness<H> {
         Ok(())
     }
 
-    pub fn read(&mut self, register: &str) -> Result<u128, HarnessError> {
+    pub fn read(&mut self, register: &str) -> Result<u64, HarnessError> {
         let reference = Self::parse_register_reference(register)?;
         let registers = self.runtime.register_access(&self.machine);
         let resolved = registers.resolve(&reference, None)?;
         Ok(resolved.read_bits(&mut self.state)?)
     }
 
-    pub fn write(&mut self, register: &str, value: u128) -> Result<(), HarnessError> {
+    pub fn write(&mut self, register: &str, value: u64) -> Result<(), HarnessError> {
         let reference = Self::parse_register_reference(register)?;
         let registers = self.runtime.register_access(&self.machine);
         let resolved = registers.resolve(&reference, None)?;

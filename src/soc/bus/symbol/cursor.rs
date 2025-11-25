@@ -2,7 +2,7 @@
 
 use crate::soc::prog::symbols::walker::{SymbolWalkEntry, SymbolWalker, ValueKind};
 use crate::soc::prog::types::arena::TypeArena;
-use crate::soc::system::bus::{BusError, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{BusError, ext::stream::ByteDataHandleExt};
 
 use super::handle::{Snapshot, SymbolHandle};
 use super::read::{ReadContext, read_type_record};
@@ -20,7 +20,7 @@ pub struct SymbolValueCursor<'handle, 'arena> {
 pub struct SymbolWalkRead {
     pub entry: SymbolWalkEntry,
     pub value: SymbolValue,
-    pub address: u64,
+    pub address: usize,
 }
 
 impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
@@ -41,7 +41,7 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
                 self.arena.get(entry.ty)
             {
                 if let Some((min_offset, _)) = bitfield.bit_span() {
-                    let total_bits = entry.offset_bits + min_offset as u64;
+                    let total_bits = entry.offset_bits + min_offset as usize;
                     address = self.snapshot.address + (total_bits / 8);
                 }
             }
@@ -79,7 +79,7 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
             });
         };
         self.handle
-            .interpret_type_at(self.arena, target, address, None)
+            .interpret_type_at(self.arena, target, address as usize, None)
     }
 
     /// Writes a raw byte slice into the location described by the walk entry.
@@ -100,14 +100,14 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
         }
         let address = self.snapshot.address + (entry.offset_bits / 8);
         self.handle.data.address_mut().jump(address)?;
-        self.handle.data.write_bytes(data)?;
+        self.handle.data.stream_in(data)?;
         Ok(())
     }
 
     fn read_entry_value(
         &mut self,
         entry: &SymbolWalkEntry,
-        address: u64,
+        address: usize,
     ) -> Result<SymbolValue, SymbolAccessError> {
         let record = self.arena.get(entry.ty);
         let mut ctx = ReadContext::new(

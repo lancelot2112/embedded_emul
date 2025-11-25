@@ -1,6 +1,6 @@
 //! Floating point helpers layered on top of `DataHandle`.
 
-use crate::soc::system::bus::{BusResult, DataHandle, ext::int::IntDataHandleExt};
+use crate::soc::bus::{BusResult, DataHandle, ext::int::IntDataHandleExt};
 
 pub trait FloatDataHandleExt {
     fn read_f32(&mut self) -> BusResult<f32>;
@@ -23,7 +23,7 @@ impl FloatDataHandleExt for DataHandle {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Device, Endianness as DeviceEndianness};
-    use crate::soc::system::bus::DeviceBus;
+    use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {

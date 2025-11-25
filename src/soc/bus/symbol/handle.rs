@@ -7,7 +7,7 @@ use crate::soc::prog::symbols::{
     SymbolHandle as TableSymbolHandle, SymbolId, SymbolRecord, SymbolTable,
 };
 use crate::soc::prog::types::arena::{TypeArena, TypeId};
-use crate::soc::system::bus::{DataHandle, DeviceBus, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{DataHandle, DeviceBus, ext::stream::ByteDataHandleExt};
 
 use super::cursor::SymbolValueCursor;
 use super::read::{ReadContext, read_type_record};
@@ -108,7 +108,7 @@ impl<'a> SymbolHandle<'a> {
     fn read_bytes(&mut self, snapshot: &Snapshot) -> Result<Vec<u8>, SymbolAccessError> {
         self.data.address_mut().jump(snapshot.address)?;
         let mut buf = vec![0u8; snapshot.size as usize];
-        self.data.read_bytes(&mut buf)?;
+        self.data.stream_out(&mut buf)?;
         Ok(buf)
     }
 
@@ -127,8 +127,8 @@ impl<'a> SymbolHandle<'a> {
         &mut self,
         arena: &TypeArena,
         type_id: TypeId,
-        address: u64,
-        size_hint: Option<u32>,
+        address: usize,
+        size_hint: Option<usize>,
     ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         let record = arena.get(type_id);
         let mut ctx = ReadContext::new(&mut self.data, arena, None, address, address, size_hint);
@@ -138,6 +138,6 @@ impl<'a> SymbolHandle<'a> {
 
 pub(super) struct Snapshot {
     pub record: SymbolRecord,
-    pub address: u64,
-    pub size: u32,
+    pub address: usize,
+    pub size: usize,
 }

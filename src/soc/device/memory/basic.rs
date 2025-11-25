@@ -17,8 +17,8 @@ impl BasicMemory {
         }
     }
 
-    pub fn size(&self) -> u64 {
-        self.bytes.read().unwrap().len() as u64
+    pub fn size(&self) -> usize {
+        self.bytes.read().unwrap().len()
     }
 }
 
@@ -27,7 +27,7 @@ impl Device for BasicMemory {
         &self.name
     }
 
-    fn span(&self) -> Range<u64> {
+    fn span(&self) -> Range<usize> {
         0..self.size()
     }
 
@@ -35,7 +35,7 @@ impl Device for BasicMemory {
         self.endian
     }
 
-    fn read(&self, byte_offset: u64, out: &mut [u8]) -> DeviceResult<()> {
+    fn read(&self, byte_offset: usize, out: &mut [u8]) -> DeviceResult<()> {
         if out.is_empty() {
             return Ok(());
         }
@@ -45,15 +45,15 @@ impl Device for BasicMemory {
         if end > data.len() {
             return Err(DeviceError::OutOfRange {
                 offset: byte_offset,
-                len: out.len() as u64,
-                capacity: data.len() as u64,
+                len: out.len(),
+                capacity: data.len(),
             });
         }
         out.copy_from_slice(&data[start..end]);
         Ok(())
     }
 
-    fn write(&self, byte_offset: u64, data_in: &[u8]) -> DeviceResult<()> {
+    fn write(&self, byte_offset: usize, data_in: &[u8]) -> DeviceResult<()> {
         if data_in.is_empty() {
             return Ok(());
         }
@@ -63,8 +63,8 @@ impl Device for BasicMemory {
         if end > data.len() {
             return Err(DeviceError::OutOfRange {
                 offset: byte_offset,
-                len: data_in.len() as u64,
-                capacity: data.len() as u64,
+                len: data_in.len(),
+                capacity: data.len(),
             });
         }
         data[start..end].copy_from_slice(data_in);

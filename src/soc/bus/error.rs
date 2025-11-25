@@ -1,20 +1,22 @@
 use std::{error::Error, fmt};
 
+use crate::soc::device::DeviceError;
+
 pub type BusResult<T> = Result<T, BusError>;
 
 #[derive(Debug)]
 pub enum BusError {
     NotMapped {
-        address: u64,
+        address: usize,
     },
     Overlap {
-        address: u64,
+        address: usize,
         details: String,
     },
     RedirectInvalid {
-        source: u64,
-        size: u64,
-        target: u64,
+        source: usize,
+        size: usize,
+        target: usize,
         reason: &'static str,
     },
     DeviceFault {
@@ -22,8 +24,8 @@ pub enum BusError {
         source: Box<dyn Error + Send + Sync>,
     },
     OutOfRange {
-        address: u64,
-        end: u64,
+        address: usize,
+        end: usize,
     },
     InvalidDeviceSpan {
         device: String,
@@ -62,6 +64,15 @@ impl fmt::Display for BusError {
             BusError::HandleNotPositioned => {
                 write!(f, "address handle has not been positioned with jump()")
             }
+        }
+    }
+}
+
+impl From<DeviceError> for BusError {
+    fn from(value: DeviceError) -> Self {
+        BusError::DeviceFault {
+            device: "unknown".into(),
+            source: Box::new(value),
         }
     }
 }

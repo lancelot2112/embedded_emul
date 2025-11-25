@@ -32,22 +32,22 @@ impl DynamicAggregate {
     }
 
     pub fn materialize<C: EvalContext>(&self, ctx: &mut C) -> (AggregateType, Vec<MemberRecord>) {
-        let mut offset_bits = 0u32;
+        let mut offset_bits = 0usize;
         let mut members = Vec::with_capacity(self.fields.len());
         for field in &self.fields {
             let byte_size = if let Some(expr) = &field.size_expr {
-                expr.clone().evaluate(ctx) as u32
+                expr.clone().evaluate(ctx) as usize
             } else {
                 0
             };
             let count = if let Some(expr) = &field.count_expr {
-                expr.clone().evaluate(ctx) as u32
+                expr.clone().evaluate(ctx) as usize
             } else {
                 1
             };
             let total_bits = byte_size.max(1) * 8 * count;
             let mut member = MemberRecord::new(field.label, field.ty, offset_bits);
-            member.bit_size = Some(total_bits as u16);
+            member.bit_size = Some(total_bits);
             members.push(member);
             offset_bits += total_bits;
         }
@@ -55,7 +55,7 @@ impl DynamicAggregate {
         let span = MemberSpan::new(0, members.len());
         let layout = LayoutSize {
             bytes: offset_bits / 8,
-            trailing_bits: (offset_bits % 8) as u16,
+            trailing_bits: (offset_bits % 8),
         };
         let mut agg = AggregateType::new(AggregateKind::Struct, span, layout);
         agg.has_dynamic = true;

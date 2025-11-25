@@ -26,7 +26,7 @@ impl<'arena> TypeBuilder<'arena> {
     pub fn declare_scalar(
         &mut self,
         name: Option<StringId>,
-        byte_size: u32,
+        byte_size: usize,
         encoding: ScalarEncoding,
         display: DisplayFormat,
     ) -> TypeId {
@@ -37,7 +37,7 @@ impl<'arena> TypeBuilder<'arena> {
     pub fn scalar(
         &mut self,
         name: Option<&str>,
-        byte_size: u32,
+        byte_size: usize,
         encoding: ScalarEncoding,
         display: DisplayFormat,
     ) -> TypeId {
@@ -45,17 +45,17 @@ impl<'arena> TypeBuilder<'arena> {
         self.declare_scalar(name_id, byte_size, encoding, display)
     }
 
-    pub fn pointer(&mut self, target: TypeId, kind: PointerKind, byte_size: u32) -> TypeId {
+    pub fn pointer(&mut self, target: TypeId, kind: PointerKind, byte_size: usize) -> TypeId {
         let pointer = PointerType::new(target, kind).with_byte_size(byte_size);
         self.arena.push_record(TypeRecord::Pointer(pointer))
     }
 
-    pub fn sequence(&mut self, element: TypeId, stride_bytes: u32, count: SequenceCount) -> TypeId {
+    pub fn sequence(&mut self, element: TypeId, stride_bytes: usize, count: SequenceCount) -> TypeId {
         let sequence = SequenceType::new(element, stride_bytes, count);
         self.arena.push_record(TypeRecord::Sequence(sequence))
     }
 
-    pub fn sequence_static(&mut self, element: TypeId, stride_bytes: u32, count: u32) -> TypeId {
+    pub fn sequence_static(&mut self, element: TypeId, stride_bytes: usize, count: usize) -> TypeId {
         self.sequence(element, stride_bytes, SequenceCount::Static(count))
     }
 
@@ -107,7 +107,7 @@ impl<'builder, 'arena> AggregateBuilder<'builder, 'arena> {
         }
     }
 
-    pub fn layout(mut self, bytes: u32, trailing_bits: u16) -> Self {
+    pub fn layout(mut self, bytes: usize, trailing_bits: usize) -> Self {
         self.layout = LayoutSize {
             bytes,
             trailing_bits,
@@ -120,7 +120,7 @@ impl<'builder, 'arena> AggregateBuilder<'builder, 'arena> {
         self
     }
 
-    pub fn member(mut self, name: impl AsRef<str>, ty: TypeId, byte_offset: u32) -> Self {
+    pub fn member(mut self, name: impl AsRef<str>, ty: TypeId, byte_offset: usize) -> Self {
         let name_id = Some(self.builder.intern(name));
         let record = MemberRecord::new(name_id, ty, byte_offset * 8);
         self.members.push(record);
@@ -131,7 +131,7 @@ impl<'builder, 'arena> AggregateBuilder<'builder, 'arena> {
         mut self,
         name: impl AsRef<str>,
         ty: TypeId,
-        offset_bits: u32,
+        offset_bits: usize,
         bit_size: u16,
     ) -> Self {
         let name_id = Some(self.builder.intern(name));

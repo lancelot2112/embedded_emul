@@ -4,7 +4,7 @@ use crate::soc::prog::types::arena::{TypeArena, TypeId};
 use crate::soc::prog::types::record::TypeRecord;
 use crate::soc::prog::types::sequence::{SequenceCount, SequenceType};
 
-pub fn type_size(arena: &TypeArena, ty: TypeId) -> Option<u32> {
+pub fn type_size(arena: &TypeArena, ty: TypeId) -> Option<usize> {
     match arena.get(ty) {
         TypeRecord::Scalar(scalar) => Some(scalar.byte_size),
         TypeRecord::Enum(enum_type) => Some(enum_type.base.byte_size),
@@ -17,7 +17,7 @@ pub fn type_size(arena: &TypeArena, ty: TypeId) -> Option<u32> {
     }
 }
 
-fn sequence_size(seq: &SequenceType) -> Option<u32> {
+fn sequence_size(seq: &SequenceType) -> Option<usize> {
     match seq.count {
         SequenceCount::Static(count) => count.checked_mul(seq.stride_bytes),
         SequenceCount::Dynamic(_) => None,

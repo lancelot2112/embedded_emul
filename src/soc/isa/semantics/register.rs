@@ -299,12 +299,12 @@ impl<'schema> ResolvedRegister<'schema> {
     }
 
     /// Reads the raw bits backing this register or subfield without applying sign extension.
-    pub fn read_bits(&self, state: &mut CoreState) -> Result<u128, IsaError> {
+    pub fn read_bits(&self, state: &mut CoreState) -> Result<u64, IsaError> {
         if let Some(field) = self.field {
             let spec = self.field_spec(field)?;
             let container = self.read_raw(state)?;
             let (value, _) = spec.read_bits(container);
-            Ok(value as u128)
+            Ok(value as u64)
         } else {
             state
                 .read_register(&self.resolved_name)
@@ -313,7 +313,7 @@ impl<'schema> ResolvedRegister<'schema> {
     }
 
     /// Writes raw bits into the register or subfield, masking to the declared width.
-    pub fn write_bits(&self, state: &mut CoreState, value: u128) -> Result<(), IsaError> {
+    pub fn write_bits(&self, state: &mut CoreState, value: u64) -> Result<(), IsaError> {
         if let Some(field) = self.field {
             let spec = self.field_spec(field)?;
             let narrow = u64::try_from(value).map_err(|_| {
@@ -331,13 +331,13 @@ impl<'schema> ResolvedRegister<'schema> {
             })?;
             self.write_raw(state, updated)
         } else {
-            if self.metadata.bit_width > 128 {
+            if self.metadata.bit_width > 64 {
                 return Err(IsaError::Machine(format!(
                     "register '{}::{}' width {} exceeds harness support",
                     self.metadata.space, self.element.label, self.metadata.bit_width
                 )));
             }
-            let masked = mask_to_width_u128(value, self.metadata.bit_width);
+            let masked = mask_to_width_u64(value, self.metadata.bit_width);
             state
                 .write_register(&self.resolved_name, masked)
                 .map_err(core_state_error)
@@ -359,7 +359,7 @@ impl<'schema> ResolvedRegister<'schema> {
         } else {
             let masked = mask_to_width(value, self.metadata.bit_width);
             state
-                .write_register(&self.resolved_name, masked as u128)
+                .write_register(&self.resolved_name, masked as u64)
                 .map_err(core_state_error)
         }
     }
@@ -379,7 +379,7 @@ impl<'schema> ResolvedRegister<'schema> {
 
     fn write_raw(&self, state: &mut CoreState, value: u64) -> Result<(), IsaError> {
         state
-            .write_register(&self.resolved_name, value as u128)
+            .write_register(&self.resolved_name, value as u64)
             .map_err(core_state_error)
     }
 
@@ -448,13 +448,13 @@ fn mask_to_width(value: i64, width: u32) -> u64 {
     }
 }
 
-fn mask_to_width_u128(value: u128, width: u32) -> u128 {
+fn mask_to_width_u64(value: u64, width: u32) -> u64 {
     if width == 0 {
         0
-    } else if width >= 128 {
+    } else if width >= 64 {
         value
     } else {
-        let mask = (1u128 << width) - 1;
+        let mask = (1u64 << width) - 1;
         value & mask
     }
 }

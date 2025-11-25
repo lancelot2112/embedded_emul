@@ -13,7 +13,7 @@ use crate::soc::prog::types::record::TypeRecord;
 use crate::soc::prog::types::scalar::{
     DisplayFormat, EnumType, EnumVariant, ScalarEncoding, ScalarType,
 };
-use crate::soc::system::bus::DeviceBus;
+use crate::soc::bus::DeviceBus;
 use std::sync::Arc;
 
 fn make_bus(size: usize) -> (Arc<DeviceBus>, Arc<BasicMemory>) {

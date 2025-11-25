@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use crate::soc::system::bus::{
+use crate::soc::bus::{
     BusResult, DataHandle,
     ext::{int::IntDataHandleExt, stream::ByteDataHandleExt},
 };
@@ -18,7 +18,7 @@ pub trait StringDataHandleExt {
 impl StringDataHandleExt for DataHandle {
     fn read_utf8(&mut self, len: usize) -> BusResult<String> {
         let mut buf = vec![0u8; len];
-        self.read_bytes(&mut buf)?;
+        self.stream_out(&mut buf)?;
         Ok(trim_nul(Cow::Borrowed(buf.as_slice())).into_owned())
     }
 
@@ -52,7 +52,7 @@ fn trim_nul(data: Cow<'_, [u8]>) -> Cow<'_, str> {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Device, Endianness};
-    use crate::soc::system::bus::DeviceBus;
+    use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn prepare_handle(bytes: &[u8]) -> DataHandle {

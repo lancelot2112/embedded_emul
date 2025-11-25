@@ -8,12 +8,12 @@ use super::expr::ExprProgram;
 #[derive(Clone, Debug, PartialEq)]
 pub struct SequenceType {
     pub element: TypeId,
-    pub stride_bytes: u32,
+    pub stride_bytes: usize,
     pub count: SequenceCount,
 }
 
 impl SequenceType {
-    pub fn new(element: TypeId, stride_bytes: u32, count: SequenceCount) -> Self {
+    pub fn new(element: TypeId, stride_bytes: usize, count: SequenceCount) -> Self {
         Self {
             element,
             stride_bytes,
@@ -21,7 +21,7 @@ impl SequenceType {
         }
     }
 
-    pub fn element_count(&self) -> Option<u32> {
+    pub fn element_count(&self) -> Option<usize> {
         match &self.count {
             SequenceCount::Static(value) => Some(*value),
             _ => None,
@@ -31,7 +31,7 @@ impl SequenceType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SequenceCount {
-    Static(u32),
+    Static(usize),
     Dynamic(CountSource),
 }
 

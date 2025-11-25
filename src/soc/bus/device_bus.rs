@@ -24,9 +24,9 @@ pub struct DeviceBus {
     bucket_bits: u8,
     devices: RwLock<Vec<Arc<dyn Device>>>,
     name_index: RwLock<HashMap<String, usize>>,
-    buckets: RwLock<HashMap<u64, Vec<BusRange>>>,
-    range_index: RwLock<HashMap<u64, Vec<u64>>>,
-    redirect_index: RwLock<HashMap<(u64, u64), u64>>,
+    buckets: RwLock<HashMap<usize, Vec<BusRange>>>,
+    range_index: RwLock<HashMap<usize, Vec<usize>>>,
+    redirect_index: RwLock<HashMap<(usize, usize), usize>>,
     next_range_id: AtomicU64,
 }
 
@@ -44,7 +44,7 @@ impl DeviceBus {
         }
     }
 
-    fn bucket_index(&self, address: u64) -> u64 {
+    fn bucket_index(&self, address: usize) -> usize {
         address >> self.bucket_bits
     }
 
@@ -77,13 +77,13 @@ impl DeviceBus {
 
     fn add_range(
         &self,
-        bus_start: u64,
-        bus_end: u64,
+        bus_start: usize,
+        bus_end: usize,
         device_id: usize,
-        device_offset: u64,
+        device_offset: usize,
         priority: u8,
         kind: RangeKind,
-    ) -> BusResult<u64> {
+    ) -> BusResult<usize> {
         if bus_end <= bus_start {
             return Err(BusError::Overlap {
                 address: bus_start,
@@ -91,7 +91,7 @@ impl DeviceBus {
             });
         }
 
-        let id = self.next_range_id.fetch_add(1, Ordering::Relaxed);
+        let id = self.next_range_id.fetch_add(1, Ordering::Relaxed) as usize;
         let mut touched = Vec::new();
         let start_idx = self.bucket_index(bus_start);
         let end_idx = self.bucket_index(bus_end - 1);
@@ -117,7 +117,7 @@ impl DeviceBus {
         Ok(id)
     }
 
-    fn remove_range(&self, range_id: u64) -> BusResult<bool> {
+    fn remove_range(&self, range_id: usize) -> BusResult<bool> {
         let bucket_indices = match self.range_index.write().unwrap().remove(&range_id) {
             Some(indices) => indices,
             None => return Ok(false),
@@ -135,7 +135,7 @@ impl DeviceBus {
         Ok(true)
     }
 
-    pub fn register_device(&self, device: Arc<dyn Device>, base_address: u64) -> BusResult<()> {
+    pub fn register_device(&self, device: Arc<dyn Device>, base_address: usize) -> BusResult<()> {
         let span = device.span();
         if span.start != 0 || span.end <= span.start {
             return Err(BusError::InvalidDeviceSpan {
@@ -176,7 +176,7 @@ impl DeviceBus {
         Ok(())
     }
 
-    pub fn redirect(&self, source_start: u64, size: u64, target_start: u64) -> BusResult<()> {
+    pub fn redirect(&self, source_start: usize, size: usize, target_start: usize) -> BusResult<()> {
         if size == 0 {
             return Err(BusError::RedirectInvalid {
                 source: source_start,
@@ -229,7 +229,7 @@ impl DeviceBus {
         Ok(())
     }
 
-    pub fn remove_redirect(&self, source_start: u64, size: u64) -> BusResult<bool> {
+    pub fn remove_redirect(&self, source_start: usize, size: usize) -> BusResult<bool> {
         let range_id = match self
             .redirect_index
             .write()
@@ -242,7 +242,7 @@ impl DeviceBus {
         self.remove_range(range_id)
     }
 
-    pub fn resolve(&self, address: u64) -> BusResult<ResolvedRange> {
+    pub fn resolve(&self, address: usize) -> BusResult<ResolvedRange> {
         let bucket_idx = self.bucket_index(address);
         let segment = {
             let buckets = self.buckets.read().unwrap();
@@ -271,7 +271,7 @@ impl DeviceBus {
         })
     }
 
-    pub fn bytes_to_end(&self, address: u64) -> BusResult<u64> {
+    pub fn bytes_to_end(&self, address: usize) -> BusResult<usize> {
         let resolved = self.resolve(address)?;
         Ok(resolved.bus_end - address)
     }

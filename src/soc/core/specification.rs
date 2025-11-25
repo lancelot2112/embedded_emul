@@ -102,6 +102,20 @@ impl CoreSpecBuilder {
         self
     }
 
+    pub fn subfield(mut self, name: impl Into<String>, bit_offset: u32, bit_len: u32) -> Self {
+        let name = name.into();
+        if bit_len == 0 {
+            self.errors.push(CoreSpecError::InvalidWidth {
+                name,
+                width: bit_len,
+            });
+            return self;
+        }
+        //grab previous register
+        self.push_spec(name, bit_offset, bit_len);
+        self
+    }
+
     pub fn register_at(mut self, name: impl Into<String>, bit_offset: u32, bit_len: u32) -> Self {
         let name = name.into();
         if bit_len == 0 {

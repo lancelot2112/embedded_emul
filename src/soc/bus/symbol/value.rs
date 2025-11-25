@@ -1,6 +1,6 @@
 //! SymbolValue enum definitions plus shared error types exposed to bus consumers.
 
-use crate::soc::system::bus::BusError;
+use crate::soc::bus::BusError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SymbolValue {

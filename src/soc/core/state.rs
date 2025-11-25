@@ -1,9 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
+use std::io::{Write};
+
 
 use crate::soc::core::specification::{CoreSpec, RegisterSpec};
 use crate::soc::device::BasicMemory;
-use crate::soc::system::bus::{BusError, DataHandle, DeviceBus};
-
+use crate::soc::bus::{BusError, DataHandle, DeviceBus};
+use crate::soc::bus::ext::BitDataHandleExt;
 /// Comprehensive processor snapshot referencing a local device bus so higher
 /// layers can reuse the existing data-handle abstractions for bitfield access.
 pub struct CoreState {
@@ -23,7 +25,7 @@ impl CoreState {
         let memory = Arc::new(BasicMemory::new(
             format!("{}_state", spec.name()),
             byte_len,
-            crate::soc::device::Endianness::Little,
+            crate::soc::device::Endianness::native(),
         ));
         let bus = Arc::new(DeviceBus::new(LOCAL_BUS_BUCKET_BITS));
         bus.register_device(memory.clone(), 0)?;
@@ -63,32 +65,32 @@ impl CoreState {
         self.registers.get(name).copied()
     }
 
-    pub fn read_register(&mut self, name: &str) -> StateResult<u128> {
+    pub fn read_register(&mut self, name: &str) -> StateResult<u64> {
         let layout = self
             .registers
             .get(name)
             .copied()
             .ok_or_else(|| StateError::UnknownRegister(name.to_string()))?;
-        let bit_len = narrow_bit_len(name, layout.bit_len)?;
+        let bit_len = narrow_bit_len(name, layout.bit_len as u32)?;
         self.read_bits_at(layout.byte_offset, layout.bit_offset, bit_len)
     }
 
-    pub fn write_register(&mut self, name: &str, value: u128) -> StateResult<()> {
+    pub fn write_register(&mut self, name: &str, value: u64) -> StateResult<()> {
         let layout = self
             .registers
             .get(name)
             .copied()
             .ok_or_else(|| StateError::UnknownRegister(name.to_string()))?;
-        let bit_len = narrow_bit_len(name, layout.bit_len)?;
+        let bit_len = narrow_bit_len(name, layout.bit_len as u32)?;
         self.write_bits_at(layout.byte_offset, layout.bit_offset, bit_len, value)
     }
 
     pub fn read_bits_at(
         &mut self,
-        byte_offset: u64,
+        byte_offset: usize,
         bit_offset: u8,
         bit_len: u16,
-    ) -> StateResult<u128> {
+    ) -> StateResult<u64> {
         self.handle.address_mut().jump(byte_offset)?;
         let value = self.handle.read_bits(bit_offset, bit_len)?;
         Ok(value)
@@ -96,10 +98,10 @@ impl CoreState {
 
     pub fn write_bits_at(
         &mut self,
-        byte_offset: u64,
+        byte_offset: usize,
         bit_offset: u8,
         bit_len: u16,
-        value: u128,
+        value: u64,
     ) -> StateResult<()> {
         self.handle.address_mut().jump(byte_offset)?;
         self.handle.write_bits(bit_offset, bit_len, value)?;
@@ -110,24 +112,23 @@ impl CoreState {
         self.handle.address_mut().jump(0)?;
         let buffer = vec![0u8; self.memory.size() as usize];
         self.handle.write(&buffer)?;
-        self.handle.address_mut().jump(0)?;
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegisterLayout {
-    pub byte_offset: u64,
+    pub byte_offset: usize,
     pub bit_offset: u8,
-    pub bit_len: u32,
+    pub bit_len: u16,
 }
 
 impl RegisterLayout {
     fn from_spec(spec: &RegisterSpec) -> Self {
         Self {
-            byte_offset: (spec.bit_offset / 8) as u64,
+            byte_offset: (spec.bit_offset / 8) as usize,
             bit_offset: (spec.bit_offset % 8) as u8,
-            bit_len: spec.bit_len,
+            bit_len: spec.bit_len as u16,
         }
     }
 }
@@ -169,6 +170,15 @@ impl std::error::Error for StateError {
 impl From<BusError> for StateError {
     fn from(err: BusError) -> Self {
         StateError::Bus(err)
+    }
+}
+
+impl From<std::io::Error> for StateError {
+    fn from(err: std::io::Error) -> Self {
+        StateError::Bus(BusError::DeviceFault {
+            device: "core_state".into(),
+            source: Box::new(err),
+        })
     }
 }
 
@@ -272,14 +282,14 @@ mod tests {
         for idx in 0..8u8 {
             let name = format!("reg::CR{idx}");
             state
-                .write_register(&name, (idx as u128) & 0xF)
+                .write_register(&name, (idx as u64) & 0xF)
                 .expect("write cr slice");
         }
 
         for idx in 0..8u8 {
             let name = format!("reg::CR{idx}");
             let value = state.read_register(&name).expect("read cr slice");
-            assert_eq!(value, (idx as u128) & 0xF, "cr slice {idx} retains nibble");
+            assert_eq!(value, (idx as u64) & 0xF, "cr slice {idx} retains nibble");
         }
 
         let cr0 = state.register_layout("reg::CR0").expect("cr0 layout");

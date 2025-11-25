@@ -36,7 +36,7 @@ pub struct PointerType {
     pub kind: PointerKind,
     pub qualifiers: PointerQualifiers,
     pub address_space: AddressSpace,
-    pub byte_size: u32,
+    pub byte_size: usize,
 }
 
 impl PointerType {
@@ -50,7 +50,7 @@ impl PointerType {
         }
     }
 
-    pub fn with_byte_size(mut self, byte_size: u32) -> Self {
+    pub fn with_byte_size(mut self, byte_size: usize) -> Self {
         self.byte_size = byte_size.max(1);
         self
     }

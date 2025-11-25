@@ -5,6 +5,9 @@
 //! The handle owns an `Arc<DeviceBus>` and validates bounds for every cursor
 //! movement, mirroring the responsibilities of `BasicBusAccess` in the .NET
 //! reference implementation while remaining borrowing-friendly for Rust.
+//! It also provides a `transact` method that simplifies performing
+//! read/write operations against the currently mapped device at the current cursor
+//! position simulating atomicity.
 use std::sync::Arc;
 
 use crate::soc::device::{Device, DeviceResult};
@@ -19,26 +22,26 @@ use super::{
 pub struct AddressHandle {
     bus: Arc<DeviceBus>,
     active: Option<ActiveRange>,
-    jump_address: Option<u64>,
-    jump_device_offset: Option<u64>,
+    jump_address: Option<usize>,
+    jump_device_offset: Option<usize>,
 }
 
 #[derive(Clone)]
 struct ActiveRange {
     resolved: ResolvedRange,
-    cursor: u64,
+    cursor: usize,
 }
 
 impl ActiveRange {
-    fn bus_address(&self) -> u64 {
+    fn bus_address(&self) -> usize {
         self.resolved.bus_start + self.cursor
     }
 
-    fn device_offset(&self) -> u64 {
+    fn device_offset(&self) -> usize {
         self.resolved.device_offset + self.cursor
     }
 
-    fn bytes_remaining(&self) -> u64 {
+    fn bytes_remaining(&self) -> usize {
         self.resolved.bus_end - self.bus_address()
     }
 }
@@ -57,7 +60,7 @@ impl AddressHandle {
         &self.bus
     }
 
-    pub fn jump(&mut self, address: u64) -> BusResult<()> {
+    pub fn jump(&mut self, address: usize) -> BusResult<()> {
         let resolved = self.bus.resolve(address)?;
         let cursor = address - resolved.bus_start;
         let device_offset = resolved.device_offset + cursor;
@@ -67,7 +70,7 @@ impl AddressHandle {
         Ok(())
     }
 
-    pub fn jump_relative(&mut self, delta: i64) -> BusResult<()> {
+    pub fn jump_relative(&mut self, delta: isize) -> BusResult<()> {
         let base = self
             .jump_device_offset
             .ok_or(BusError::HandleNotPositioned)? as i128;
@@ -81,11 +84,11 @@ impl AddressHandle {
                 end: active.resolved.bus_end,
             });
         }
-        active.cursor = (target - range_start) as u64;
+        active.cursor = (target - range_start) as usize;
         Ok(())
     }
 
-    pub fn advance(&mut self, bytes: u64) -> BusResult<()> {
+    pub fn advance(&mut self, bytes: usize) -> BusResult<()> {
         let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
         if bytes > active.bytes_remaining() {
             return Err(BusError::OutOfRange {
@@ -97,7 +100,7 @@ impl AddressHandle {
         Ok(())
     }
 
-    pub fn retreat(&mut self, bytes: u64) -> BusResult<()> {
+    pub fn retreat(&mut self, bytes: usize) -> BusResult<()> {
         let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
         if bytes > active.cursor {
             return Err(BusError::OutOfRange {
@@ -109,31 +112,39 @@ impl AddressHandle {
         Ok(())
     }
 
-    pub fn bytes_to_end(&self) -> u64 {
+    pub fn bytes_to_end(&self) -> usize {
         self.active
             .as_ref()
             .map(|range| range.bytes_remaining())
             .unwrap_or(0)
     }
 
-    pub fn bus_address(&self) -> Option<u64> {
+    pub fn bus_address(&self) -> Option<usize> {
         self.active.as_ref().map(|range| range.bus_address())
     }
 
-    pub fn device_offset(&self) -> Option<u64> {
+    pub fn device_offset(&self) -> Option<usize> {
         self.active.as_ref().map(|range| range.device_offset())
     }
 
-    pub fn available(&self, size: u64) -> bool {
+    pub fn available(&self, size: usize) -> bool {
         self.active
             .as_ref()
             .map(|range| range.bytes_remaining() >= size)
             .unwrap_or(false)
     }
 
-    pub(crate) fn transact<F, T>(&mut self, size: u64, op: F) -> BusResult<T>
+    pub(crate) fn atomic_bit_transact<F, T>(&mut self, bit_offset: usize, bit_size: usize, op: F) -> BusResult<T>
     where
-        F: FnOnce(&dyn Device, u64, &ResolvedRange) -> DeviceResult<T>,
+        F: FnOnce(&dyn Device, usize, &ResolvedRange) -> DeviceResult<T>,
+    {
+        let size_bytes = (bit_offset + bit_size).div_ceil(8);
+        self.atomic_byte_transact(size_bytes, op)
+    }
+
+    pub(crate) fn atomic_byte_transact<F, T>(&mut self, size: usize, op: F) -> BusResult<T>
+    where
+        F: FnOnce(&dyn Device, usize, &ResolvedRange) -> DeviceResult<T>,
     {
         let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
         if size > active.bytes_remaining() {
@@ -144,6 +155,7 @@ impl AddressHandle {
         }
         let device_offset = active.device_offset();
         let device_name = active.resolved.device.name().to_string();
+        active.resolved.device.start_transact()?;
         let result =
             op(&*active.resolved.device, device_offset, &active.resolved).map_err(|err| {
                 BusError::DeviceFault {
@@ -151,6 +163,7 @@ impl AddressHandle {
                     source: Box::new(err),
                 }
             })?;
+        active.resolved.device.end_transact()?;
         active.cursor += size;
         Ok(result)
     }
@@ -160,7 +173,7 @@ impl AddressHandle {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Endianness};
-    use crate::soc::system::bus::DeviceBus;
+    use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_bus() -> Arc<DeviceBus> {
@@ -256,7 +269,7 @@ mod tests {
 
         // transact should execute the closure against the resolved device and advance the cursor.
         let value = handle
-            .transact(4, |device, offset, _resolved| {
+            .atomic_byte_transact(4, |device, offset, _resolved| {
                 let write_bytes = 0xAABB_CCDD_u32.to_le_bytes();
                 device.write(offset, &write_bytes)?;
                 let mut out = [0u8; 4];
@@ -271,7 +284,7 @@ mod tests {
         assert_eq!(
             handle.bus_address(),
             Some(0x2004),
-            "cursor advances by the transact size"
+            "cursor should advance by the transact size"
         );
 
         // Underlying memory sees the write at the expected device offset.

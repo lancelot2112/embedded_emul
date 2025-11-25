@@ -6,8 +6,8 @@ use crate::soc::prog::types::bitfield::BitFieldSpec;
 use crate::soc::prog::types::pointer::PointerType;
 use crate::soc::prog::types::record::TypeRecord;
 use crate::soc::prog::types::scalar::{EnumType, FixedScalar, ScalarEncoding, ScalarType};
-use crate::soc::system::bus::DataHandle;
-use crate::soc::system::bus::ext::{FloatDataHandleExt, IntDataHandleExt, StringDataHandleExt};
+use crate::soc::bus::DataHandle;
+use crate::soc::bus::ext::{FloatDataHandleExt, IntDataHandleExt, StringDataHandleExt};
 
 use super::value::{SymbolAccessError, SymbolValue};
 
@@ -15,9 +15,9 @@ pub struct ReadContext<'ctx, 'arena> {
     pub data: &'ctx mut DataHandle,
     pub arena: &'arena TypeArena,
     pub entry: Option<&'ctx SymbolWalkEntry>,
-    pub field_address: u64,
-    pub symbol_base: u64,
-    pub size_hint: Option<u32>,
+    pub field_address: usize,
+    pub symbol_base: usize,
+    pub size_hint: Option<usize>,
 }
 
 impl<'ctx, 'arena> ReadContext<'ctx, 'arena> {
@@ -25,9 +25,9 @@ impl<'ctx, 'arena> ReadContext<'ctx, 'arena> {
         data: &'ctx mut DataHandle,
         arena: &'arena TypeArena,
         entry: Option<&'ctx SymbolWalkEntry>,
-        field_address: u64,
-        symbol_base: u64,
-        size_hint: Option<u32>,
+        field_address: usize,
+        symbol_base: usize,
+        size_hint: Option<usize>,
     ) -> Self {
         Self {
             data,

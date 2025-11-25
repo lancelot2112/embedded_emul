@@ -1,3 +1,4 @@
+//! Endianness handling.
 #[cfg_attr(not(test), allow(dead_code))]
 pub const MAX_ENDIAN_BYTES: usize = 16;
 
@@ -18,75 +19,102 @@ impl Endianness {
     }
 
     #[inline(always)]
-    pub fn decode_bytes(self, bytes: &[u8]) -> u128 {
+    pub fn to_native_mut(self, bytes: &mut [u8]) {
         assert!(bytes.len() <= MAX_ENDIAN_BYTES, "value exceeds 128 bits");
-        if bytes.is_empty() {
-            return 0;
+        if bytes.len() <= 1{
+            return;
         }
-        let mut buf = [0u8; MAX_ENDIAN_BYTES];
         match self {
             Endianness::Little => {
-                buf[..bytes.len()].copy_from_slice(bytes);
-                u128::from_le_bytes(buf)
+                if cfg!(target_endian = "big") {
+                    bytes.reverse();
+                }
             }
             Endianness::Big => {
-                let start = MAX_ENDIAN_BYTES - bytes.len();
-                buf[start..].copy_from_slice(bytes);
-                u128::from_be_bytes(buf)
+                if cfg!(target_endian = "little") {
+                    bytes.reverse();
+                } 
             }
         }
     }
 
     #[inline(always)]
-    pub fn decode_bits(self, bytes: &[u8], width_bits: usize) -> u128 {
-        let value = self.decode_bytes(bytes);
-        value & mask_bits(width_bits)
-    }
-
-    #[inline(always)]
-    pub fn encode_bits(
-        self,
-        value: u128,
-        width_bits: usize,
-        byte_len: usize,
-    ) -> [u8; MAX_ENDIAN_BYTES] {
-        assert!(byte_len <= MAX_ENDIAN_BYTES, "value exceeds 128 bits");
-        if byte_len == 0 {
-            return [0u8; MAX_ENDIAN_BYTES];
+    pub fn from_native_mut(self, bytes: &mut [u8]) {
+        assert!(bytes.len() <= MAX_ENDIAN_BYTES, "value exceeds 128 bits");
+        if bytes.len() <= 1 {
+            return;
         }
-        let masked = value & mask_bits(width_bits);
-        let full = match self {
-            Endianness::Little => masked.to_le_bytes(),
-            Endianness::Big => masked.to_be_bytes(),
-        };
-        let mut out = [0u8; MAX_ENDIAN_BYTES];
         match self {
             Endianness::Little => {
-                out[..byte_len].copy_from_slice(&full[..byte_len]);
+                if cfg!(target_endian = "big") {
+                    bytes.reverse();
+                }
             }
             Endianness::Big => {
-                let start = MAX_ENDIAN_BYTES - byte_len;
-                out[..byte_len].copy_from_slice(&full[start..]);
+                if cfg!(target_endian = "little") {
+                    bytes.reverse();
+                } 
             }
         }
-        out
-    }
-
-    #[inline(always)]
-    pub fn encode_scalar(self, value: u64, bit_len: u16) -> [u8; MAX_ENDIAN_BYTES] {
-        let bits = bit_len as usize;
-        let byte_len = ((bits + 7) / 8).max(1);
-        self.encode_bits(value as u128, bits, byte_len)
     }
 }
 
-#[inline(always)]
-pub(crate) fn mask_bits(width_bits: usize) -> u128 {
-    if width_bits >= 128 {
-        u128::MAX
-    } else if width_bits == 0 {
-        0
-    } else {
-        (1u128 << width_bits) - 1
+#[cfg(test)]
+mod tests {
+    use super::Endianness;
+    #[test]
+    fn endianness_conversion_round_trip() {
+        let mut data: [u8; 8] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
+        let little = Endianness::Little;
+        let big = Endianness::Big;
+        little.to_native_mut(&mut data);
+        little.from_native_mut(&mut data);
+        assert_eq!(data, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], "little endian round trip failed");
+
+        big.to_native_mut(&mut data);
+        big.from_native_mut(&mut data);
+        assert_eq!(data, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], "big endian round trip failed");
+
+        let mut data: [u8; 3] = [0x01, 0x02, 0x03];
+        little.to_native_mut(&mut data);
+        little.from_native_mut(&mut data);
+        assert_eq!(data, [0x01, 0x02, 0x03], "little endian round trip failed");
+
+        big.to_native_mut(&mut data);
+        big.from_native_mut(&mut data);
+        assert_eq!(data, [0x01, 0x02, 0x03], "big endian round trip failed");
     }
+
+    #[test]
+    fn endianness_conversion_different() {
+        let mut data: [u8; 4] = [0x0A, 0x0B, 0x0C, 0x0D];
+        let endian = if cfg!(target_endian = "little") {
+            Endianness::Big
+        } else {
+            Endianness::Little
+        };
+
+        endian.to_native_mut(&mut data);
+        assert_eq!(data, [0x0D, 0x0C, 0x0B, 0x0A], "endianness conversion failed");
+
+        endian.from_native_mut(&mut data);
+        assert_eq!(data, [0x0A, 0x0B, 0x0C, 0x0D], "endianness reverse conversion failed");
+    }
+
+    #[test]
+    fn endianness_conversion_same() {
+        let mut data: [u8; 4] = [0x0A, 0x0B, 0x0C, 0x0D];
+        let endian = if cfg!(target_endian = "little") {
+            Endianness::Little
+        } else {
+            Endianness::Big
+        };
+
+        endian.to_native_mut(&mut data);
+        assert_eq!(data, [0x0A, 0x0B, 0x0C, 0x0D], "endianness conversion failed");
+
+        endian.from_native_mut(&mut data);
+        assert_eq!(data, [0x0A, 0x0B, 0x0C, 0x0D], "endianness reverse conversion failed");
+    }
+
 }

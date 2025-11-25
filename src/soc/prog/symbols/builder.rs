@@ -22,9 +22,9 @@ pub struct SymbolBuilder<'a> {
     provenance: SymbolProvenance,
     kind: SymbolKind,
     storage: StorageClass,
-    runtime_addr: Option<u64>,
-    file_addr: Option<u64>,
-    size: Option<u32>,
+    runtime_addr: Option<usize>,
+    file_addr: Option<usize>,
+    size: Option<usize>,
     section: Option<LabelId>,
     info: SymbolInfo,
     byte_order: Endianness,
@@ -108,17 +108,17 @@ impl<'a> SymbolBuilder<'a> {
         self
     }
 
-    pub fn runtime_addr(mut self, addr: u64) -> Self {
+    pub fn runtime_addr(mut self, addr: usize) -> Self {
         self.runtime_addr = Some(addr);
         self
     }
 
-    pub fn file_addr(mut self, addr: u64) -> Self {
+    pub fn file_addr(mut self, addr: usize) -> Self {
         self.file_addr = Some(addr);
         self
     }
 
-    pub fn size(mut self, size: u32) -> Self {
+    pub fn size(mut self, size: usize) -> Self {
         self.size = Some(size);
         self
     }

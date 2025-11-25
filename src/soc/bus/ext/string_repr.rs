@@ -1,6 +1,6 @@
 //! Helpers for building printable representations from bus data.
 
-use crate::soc::system::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
 
 pub trait StringReprDataHandleExt {
     fn read_hex(&mut self, length: usize) -> BusResult<String>;
@@ -10,13 +10,13 @@ pub trait StringReprDataHandleExt {
 impl StringReprDataHandleExt for DataHandle {
     fn read_hex(&mut self, length: usize) -> BusResult<String> {
         let mut buf = vec![0u8; length];
-        self.read_bytes(&mut buf)?;
+        self.stream_out(&mut buf)?;
         Ok(buf.iter().map(|b| format!("{b:02X}")).collect())
     }
 
     fn read_ascii(&mut self, length: usize) -> BusResult<String> {
         let mut buf = vec![0u8; length];
-        self.read_bytes(&mut buf)?;
+        self.stream_out(&mut buf)?;
         Ok(buf
             .into_iter()
             .map(|b| if b.is_ascii_graphic() { b as char } else { '.' })
@@ -28,7 +28,7 @@ impl StringReprDataHandleExt for DataHandle {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Device, Endianness};
-    use crate::soc::system::bus::DeviceBus;
+    use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {

@@ -443,9 +443,9 @@ impl PendingRegister {
         if let Some(desc) = &self.description {
             base_builder = base_builder.description(desc);
         }
-        let bytes_per_element = element_bytes(self.bit_width);
+        let bytes_per_element = element_bytes(self.bit_width as usize);
         let total_bytes = bytes_per_element
-            .checked_mul(self.count)
+            .checked_mul(self.count as usize)
             .ok_or_else(|| IsaError::Machine("register byte size overflow".into()))?;
         base_builder = base_builder.size(total_bytes);
         let base_symbol = base_builder.finish();
@@ -508,15 +508,15 @@ fn build_register_entry(
     let container = *scalar_cache.entry(bit_width).or_insert_with(|| {
         builder.scalar(
             None,
-            element_bytes(bit_width),
+            element_bytes(bit_width as usize),
             ScalarEncoding::Unsigned,
             DisplayFormat::Hex,
         )
     });
     let (fields, members) = build_register_fields(builder, container, bit_width, space_name, info)?;
     let layout = LayoutSize {
-        bytes: bit_width / 8,
-        trailing_bits: (bit_width % 8) as u16,
+        bytes: (bit_width / 8) as usize,
+        trailing_bits: (bit_width % 8) as usize,
     };
     let mut aggregate = builder
         .aggregate(AggregateKind::Struct)
@@ -526,8 +526,8 @@ fn build_register_entry(
     }
     let structure = aggregate.finish();
     let count = register_count(info);
-    let stride_bytes = element_bytes(bit_width);
-    let array = builder.sequence_static(structure, stride_bytes, count);
+    let stride_bytes = element_bytes(bit_width as usize);
+    let array = builder.sequence_static(structure, stride_bytes, count as usize);
     let elements = materialize_elements(info);
 
     Ok(PendingRegister {
@@ -571,7 +571,7 @@ fn build_alias_fields(
     let container = *scalar_cache.entry(bit_width).or_insert_with(|| {
         builder.scalar(
             None,
-            element_bytes(bit_width),
+            element_bytes(bit_width as usize),
             ScalarEncoding::Unsigned,
             DisplayFormat::Hex,
         )
@@ -665,7 +665,7 @@ fn build_register_fields(
         let offset = spec.bit_span().map(|(start, _)| start as u32).unwrap_or(0);
         let name_id = Some(builder.intern(&sub.name));
         let ty = builder.bitfield(spec);
-        let record = MemberRecord::new(name_id, ty, offset).with_bitfield(width as u16);
+        let record = MemberRecord::new(name_id, ty, offset as usize).with_bitfield(width as u16);
         fields.push(RegisterFieldMetadata {
             name: sub.name.clone(),
             ty,
@@ -701,6 +701,6 @@ fn materialize_elements(info: &RegisterInfo) -> Vec<PendingElement> {
     }
 }
 
-fn element_bytes(bit_width: u32) -> u32 {
+fn element_bytes(bit_width: usize) -> usize {
     ((bit_width + 7) / 8).max(1)
 }

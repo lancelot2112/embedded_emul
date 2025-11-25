@@ -12,8 +12,8 @@ use super::sequence::SequenceType;
 /// Compact representation of the byte size and trailing bit padding of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LayoutSize {
-    pub bytes: u32,
-    pub trailing_bits: u16,
+    pub bytes: usize,
+    pub trailing_bits: usize,
 }
 
 impl LayoutSize {
@@ -22,8 +22,8 @@ impl LayoutSize {
         trailing_bits: 0,
     };
 
-    pub fn total_bits(self) -> u32 {
-        (self.bytes << 3) + self.trailing_bits as u32
+    pub fn total_bits(self) -> usize {
+        (self.bytes << 3) + self.trailing_bits
     }
 }
 
@@ -64,12 +64,12 @@ impl MemberSpan {
 pub struct MemberRecord {
     pub name_id: Option<StringId>,
     pub ty: TypeId,
-    pub offset_bits: u32,
-    pub bit_size: Option<u16>,
+    pub offset_bits: usize,
+    pub bit_size: Option<usize>,
 }
 
 impl MemberRecord {
-    pub fn new(name_id: Option<StringId>, ty: TypeId, offset_bits: u32) -> Self {
+    pub fn new(name_id: Option<StringId>, ty: TypeId, offset_bits: usize) -> Self {
         Self {
             name_id,
             ty,
@@ -79,7 +79,7 @@ impl MemberRecord {
     }
 
     pub fn with_bitfield(mut self, bit_size: u16) -> Self {
-        self.bit_size = Some(bit_size);
+        self.bit_size = Some(bit_size as usize);
         self
     }
 }
@@ -88,7 +88,7 @@ impl MemberRecord {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OpaqueType {
     pub name_id: Option<StringId>,
-    pub byte_size: u32,
+    pub byte_size: usize,
 }
 
 /// All supported type shapes.

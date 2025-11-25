@@ -8,7 +8,7 @@ use super::{endianness::Endianness, error::DeviceResult};
 
 pub trait Device: Send + Sync {
     fn name(&self) -> &str;
-    fn span(&self) -> Range<u64>;
+    fn span(&self) -> Range<usize>;
     fn endianness(&self) -> Endianness {
         Endianness::Little
     }
@@ -25,10 +25,10 @@ pub trait Device: Send + Sync {
     }
 
     /// Read a contiguous slice of bytes from the device at `byte_offset` into `out`.
-    fn read(&self, byte_offset: u64, out: &mut [u8]) -> DeviceResult<()>;
+    fn read(&self, byte_offset: usize, out: &mut [u8]) -> DeviceResult<()>;
 
     /// Write a contiguous slice of bytes to the device at `byte_offset` from `data`.
-    fn write(&self, byte_offset: u64, data: &[u8]) -> DeviceResult<()>;
+    fn write(&self, byte_offset: usize, data: &[u8]) -> DeviceResult<()>;
 }
 
 #[cfg(test)]
@@ -44,7 +44,7 @@ mod tests {
             "faulty"
         }
 
-        fn span(&self) -> Range<u64> {
+        fn span(&self) -> Range<usize> {
             0..4
         }
 
@@ -52,11 +52,11 @@ mod tests {
             Endianness::Little
         }
 
-        fn read(&self, _byte_offset: u64, _out: &mut [u8]) -> DeviceResult<()> {
+        fn read(&self, _byte_offset: usize, _out: &mut [u8]) -> DeviceResult<()> {
             Err(DeviceError::Unsupported("read"))
         }
 
-        fn write(&self, _byte_offset: u64, _data: &[u8]) -> DeviceResult<()> {
+        fn write(&self, _byte_offset: usize, _data: &[u8]) -> DeviceResult<()> {
             Err(DeviceError::Unsupported("write"))
         }
     }

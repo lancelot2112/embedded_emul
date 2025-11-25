@@ -1,6 +1,6 @@
 //! Lightweight helpers for reading simple cryptographic primitives.
 
-use crate::soc::system::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
 use sha2::{Digest, Sha256};
 
 pub trait CryptoDataHandleExt {
@@ -10,7 +10,7 @@ pub trait CryptoDataHandleExt {
 impl CryptoDataHandleExt for DataHandle {
     fn read_sha256(&mut self, length: usize) -> BusResult<[u8; 32]> {
         let mut buffer = vec![0u8; length];
-        self.read_bytes(&mut buffer)?;
+        self.stream_out(&mut buffer)?;
         let digest = Sha256::digest(&buffer);
         let mut array = [0u8; 32];
         array.copy_from_slice(&digest);
@@ -22,7 +22,7 @@ impl CryptoDataHandleExt for DataHandle {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Device, Endianness};
-    use crate::soc::system::bus::DeviceBus;
+    use crate::soc::bus::DeviceBus;
     use hex_literal::hex;
     use std::sync::Arc;
 

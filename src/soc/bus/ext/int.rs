@@ -1,6 +1,7 @@
 //! Integer helpers that perform width-aware reads and sign/zero extension on top of `DataHandle`.
 
-use crate::soc::system::bus::{BusError, BusResult, DataHandle};
+use crate::soc::bus::{BusError, BusResult, DataHandle};
+use super::bits::BitDataHandleExt;
 
 /// Trait adding width-aware integer reads directly on top of `DataHandle`.
 pub trait IntDataHandleExt {
@@ -33,39 +34,39 @@ impl IntDataHandleExt for DataHandle {
 
     fn write_unsigned(&mut self, bit_off: u8, width_bits: usize, value: u64) -> BusResult<()> {
         ensure_width(width_bits)?;
-        self.write_bits(bit_off, width_bits as u16, value as u128)
+        self.write_bits(bit_off, width_bits as u16, value)
     }
 
     fn read_u8(&mut self) -> BusResult<u8> {
-        self.read_bits(0, 8).map(|value| value as u8)
+        self.read_data(1).map(|val| val as u8)
     }
 
     fn read_u16(&mut self) -> BusResult<u16> {
-        self.read_bits(0, 16).map(|value| value as u16)
+        self.read_data(2).map(|val| val as u16)
     }
 
     fn read_u32(&mut self) -> BusResult<u32> {
-        self.read_bits(0, 32).map(|value| value as u32)
+        self.read_data(4).map(|val| val as u32)
     }
 
     fn read_u64(&mut self) -> BusResult<u64> {
-        self.read_bits(0, 64).map(|value| value as u64)
+        self.read_data(8)
     }
 
     fn write_u8(&mut self, value: u8) -> BusResult<()> {
-        self.write_bits(0, 8, value as u128)
+        self.write_data(value as u64, 1)
     }
 
     fn write_u16(&mut self, value: u16) -> BusResult<()> {
-        self.write_bits(0, 16, value as u128)
+        self.write_data(value as u64, 2)
     }
 
     fn write_u32(&mut self, value: u32) -> BusResult<()> {
-        self.write_bits(0, 32, value as u128)
+        self.write_data(value as u64, 4)
     }
 
     fn write_u64(&mut self, value: u64) -> BusResult<()> {
-        self.write_bits(0, 64, value as u128)
+        self.write_data(value, 8)
     }
 }
 
@@ -94,7 +95,7 @@ fn ensure_width(width_bits: usize) -> BusResult<()> {
 mod tests {
     use super::*;
     use crate::soc::device::{BasicMemory, Endianness as DeviceEndianness};
-    use crate::soc::system::bus::{DeviceBus, ext::stream::ByteDataHandleExt};
+    use crate::soc::bus::{DeviceBus, ext::stream::ByteDataHandleExt};
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {
@@ -103,7 +104,7 @@ mod tests {
         bus.register_device(memory.clone(), 0).unwrap();
         let mut preload = DataHandle::new(bus.clone());
         preload.address_mut().jump(0).unwrap();
-        preload.write_bytes(bytes).unwrap();
+        preload.stream_in(bytes).unwrap();
         let mut handle = DataHandle::new(bus);
         handle.address_mut().jump(0).unwrap();
         handle

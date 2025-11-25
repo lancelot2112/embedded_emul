@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::soc::isa::diagnostic::{DiagnosticPhase, IsaDiagnostic};
-use crate::soc::system::bus::error::BusError;
+use crate::soc::bus::error::BusError;
 
 /// Represents any failure that can occur while loading, parsing, validating, or executing ISA
 /// artifacts.
