@@ -9,7 +9,6 @@
 //! read/write operations against the currently mapped device at the current cursor
 //! position simulating atomicity.
 use std::sync::Arc;
-use smallvec::SmallVec;
 
 use crate::soc::device::{Device, DeviceResult};
 
@@ -25,6 +24,58 @@ pub struct AddressHandle {
     active: Option<ActiveRange>,
     jump_address: Option<usize>,
     jump_device_offset: Option<usize>,
+}
+
+//A pinned range allows for reading/writing to a specific range on a device
+//and leaving it reserved to promote some atomicity guarantees.  
+pub struct PinnedRange<'a> {
+    device: &'a dyn Device,
+    start: usize,
+    len: usize,
+}
+
+impl<'a> PinnedRange<'a> {
+    pub fn create(
+        device: &'a dyn Device,
+        start: usize,
+        len: usize,
+    ) -> BusResult<Self> {
+        device.reserve(start, len)?;
+        Ok(Self { device, start, len })
+    }
+
+    pub fn read(&self, dst: &mut [u8]) -> BusResult<()> {
+        if dst.len() > self.len {
+            return Err(BusError::OutOfRange {
+                address: self.start + dst.len(),
+                end: self.start + self.len,
+            });
+        }
+        self.device.read(self.start, dst).map_err(|err| BusError::DeviceFault {
+            device: self.device.name().to_string(),
+            source: Box::new(err),
+        })
+    }
+
+    pub fn write(&self, src: &[u8]) -> BusResult<()> {
+        if src.len() > self.len {
+            return Err(BusError::OutOfRange {
+                address: self.start + src.len(),
+                end: self.start + self.len,
+            });
+        }
+        self.device.write(self.start, src).map_err(|err| BusError::DeviceFault {
+            device: self.device.name().to_string(),
+            source: Box::new(err),
+        })
+    }
+}
+
+impl Drop for PinnedRange<'_> {
+    fn drop(&mut self) {
+        // ignore errors on drop; handle logs if you need them
+        let _ = self.device.commit(self.start);
+    }
 }
 
 #[derive(Clone)]
@@ -137,66 +188,16 @@ impl AddressHandle {
             .unwrap_or(false)
     }
 
-    pub fn lock(&mut self, out: &mut [u8]) -> BusResult<())> {
-        //Do we have a device at our current location
+    pub fn pin(&mut self, len: usize) -> BusResult<PinnedRange<'_>> {
         let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
-        //Start a transaction on the device
-        active.resolved.device.start_transact()?;
-
-        //Check our requested size
-        if size > active.bytes_remaining() {
-            let err = Err(BusError::OutOfRange {
-                address: active.bus_address() + size,
-                end: active.resolved.bus_end,
-            });
-            active.resolved.device.end_transact()?;
-            return err;
-        }
-        let mut buf = SmallVec::<[u8; 256]>::with_capacity(size);
-        active.resolved.device.read(active.device_offset(), &mut buf).map_err(|err| {
-            BusError::DeviceFault {
-                device: active.resolved.device.name().to_string(),
-                source: Box::new(err),
-            }
-        })?;
-        Ok(&buf)
-    }
-
-    pub fn unlock(&mut self) -> BusResult<()> {
-        if let Some(active) = self.active.as_mut() {
-            active
-                .resolved
-                .device
-                .end_transact()?;
-            Ok(())
-        } else {
-            Err(BusError::HandleNotPositioned)
-        }
-    }
-    pub(crate) fn transact<F, T>(&mut self, size: usize, op: F) -> BusResult<T>
-    where
-        F: FnOnce(&dyn Device, usize, &ResolvedRange) -> DeviceResult<T>,
-    {
-        let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
-        if size > active.bytes_remaining() {
+        if len > active.bytes_remaining() {
             return Err(BusError::OutOfRange {
-                address: active.bus_address() + size,
+                address: active.bus_address() + len,
                 end: active.resolved.bus_end,
             });
         }
-        let device_offset = active.device_offset();
-        let device_name = active.resolved.device.name().to_string();
-        active.resolved.device.start_transact()?;
-        let result =
-            op(&*active.resolved.device, device_offset, &active.resolved).map_err(|err| {
-                BusError::DeviceFault {
-                    device: device_name,
-                    source: Box::new(err),
-                }
-            })?;
-        active.resolved.device.end_transact()?;
-        active.cursor += size;
-        Ok(result)
+        let device = &*active.resolved.device;
+        PinnedRange::create(device, active.device_offset(), len)
     }
 }
 
@@ -299,19 +300,19 @@ mod tests {
         handle.jump(0x2000).unwrap();
 
         // transact should execute the closure against the resolved device and advance the cursor.
-        let value = handle
-            .transact(4, |device, offset, _resolved| {
-                let write_bytes = 0xAABB_CCDD_u32.to_le_bytes();
-                device.write(offset, &write_bytes)?;
-                let mut out = [0u8; 4];
-                device.read(offset, &mut out)?;
-                Ok(u32::from_le_bytes(out) as u64)
-            })
-            .unwrap();
-        assert_eq!(
-            value, 0xAABB_CCDD_u64,
-            "closure should observe the written 32-bit value"
-        );
+        {
+            let pin = handle.pin(4).expect("pin for transact");
+            let write_bytes = 0xAABB_CCDD_u32.to_le_bytes();
+            pin.write(&write_bytes).expect("write for transact");
+            let mut out = [0u8; 4];
+            pin.read(&mut out).expect("read for transact");
+            let value = u32::from_le_bytes(out);
+            assert_eq!(
+                value, 0xAABB_CCDD,
+                "pinned range should observe the written 32-bit value"
+            );
+        };
+
         assert_eq!(
             handle.bus_address(),
             Some(0x2004),

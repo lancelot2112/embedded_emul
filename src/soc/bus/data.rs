@@ -11,9 +11,105 @@ use super::{
     error::{BusResult},
 };
 
-use crate::soc::device::{
-    DeviceError
-};
+use crate::soc::{bus::BusError, device::{
+    Device, DeviceError, Endianness
+}};
+
+
+pub struct ScalarHandle<'a> {
+    data: PinnedRange<'a>,
+    cache: Option<u64>,
+    start: usize,
+    size: usize,
+}
+
+impl<'a> ScalarHandle<'a> {
+    pub fn create(
+        data: PinnedRange<'a>,
+        start: usize,
+        size: usize,
+    ) -> Self {
+        Self {
+            data,
+            cache: None,
+            start,
+            size,
+        }
+    }
+
+    pub fn read(&mut self) -> BusResult<u64> {
+        if let Some(cached) = self.cache {
+            return Ok(cached);
+        }
+        let cache = if self.size <= 8 {
+            let mut buf = [0u8; 8];
+            let window = &mut buf[..self.size];
+            let data = self.data.cache.as_ref().ok_or(BusError::DeviceFault {
+                device: self.data.device.name().to_string(),
+                source: Box::new(DeviceError::Unsupported("no cached data")),
+            })?;
+            window.copy_from_slice(&data[self.start..self.start + self.size]);
+            let value = self.data.device.endianness().to_native(u64::from_ne_bytes(buf));
+            value
+        } else {
+            return Err(BusError::Unsupported("scalar read size > 8 bytes"));
+        };
+        self.cache = Some(cache);
+        Ok(cache)
+    }
+}
+
+//A pinned range allows for reading/writing to a specific range on a device
+//and leaving it reserved to promote some atomicity guarantees.  
+pub struct PinnedRange<'a> {
+    device: &'a dyn Device,
+    start: usize,
+    len: usize,
+}
+
+impl<'a> PinnedRange<'a> {
+    pub fn create(
+        device: &'a dyn Device,
+        start: usize,
+        len: usize,
+    ) -> BusResult<Self> {
+        device.reserve(start, len)?;
+        Ok(Self { device, start, len})
+    }
+
+    pub fn read(&self, dest: &mut [u8]) -> BusResult<()> {
+        if dest.len() > self.len {
+            return Err(BusError::OutOfRange {
+                address: self.start + dest.len(),
+                end: self.start + self.len,
+            });
+        }
+        self.device.read(self.start, dest).map_err(|err| BusError::DeviceFault {
+            device: self.device.name().to_string(),
+            source: Box::new(err),
+        })
+    }
+   
+    pub fn write(&self, src: &[u8]) -> BusResult<()> {
+        if src.len() > self.len {
+            return Err(BusError::OutOfRange {
+                address: self.start + src.len(),
+                end: self.start + self.len,
+            });
+        }
+        self.device.write(self.start, src).map_err(|err| BusError::DeviceFault {
+            device: self.device.name().to_string(),
+            source: Box::new(err),
+        })
+    }
+}
+
+impl Drop for PinnedRange<'_> {
+    fn drop(&mut self) {
+        // ignore errors on drop; handle logs if you need them
+        let _ = self.device.commit(self.start);
+    }
+}
 
 pub struct DataHandle {
     address: AddressHandle,

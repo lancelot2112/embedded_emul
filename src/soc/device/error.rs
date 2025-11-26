@@ -11,6 +11,7 @@ pub enum DeviceError {
     },
     Unsupported(&'static str),
     Backend(Box<dyn Error + Send + Sync>),
+    LockPoisoned(String),
 }
 
 impl fmt::Display for DeviceError {
@@ -28,6 +29,7 @@ impl fmt::Display for DeviceError {
             }
             DeviceError::Unsupported(msg) => write!(f, "device operation unsupported: {msg}"),
             DeviceError::Backend(_) => write!(f, "device backend error"),
+            DeviceError::LockPoisoned(msg) => write!(f, "device lock poisoned: {msg}"),
         }
     }
 }

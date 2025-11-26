@@ -2,7 +2,7 @@
 //! memory span and provide typed read/write helpers with a consistent
 //! `DeviceResult` error surface so bus code can translate failures into
 //! `BusError::DeviceFault`.
-use std::ops::Range;
+use std::{ops::Range, sync::{RwLockReadGuard, RwLockWriteGuard}};
 
 use super::{endianness::Endianness, error::DeviceResult};
 
@@ -12,17 +12,21 @@ pub trait Device: Send + Sync {
     fn endianness(&self) -> Endianness {
         Endianness::Little
     }
-    /// Begin a transaction window for atomic byte accesses.
-    fn start_transact(&self) -> DeviceResult<()> {
-        let _ = self;
+    
+    /// Reserve a byte range on the device for atomic access.
+    /// Default implementation is a no-op.
+    fn reserve(&self, _byte_offset: usize, _len: usize) -> DeviceResult<()> {
         Ok(())
     }
 
-    /// End a transaction window previously started with `start_transact`.
-    fn end_transact(&self) -> DeviceResult<()> {
-        let _ = self;
+    /// Commit a previously reserved byte range on the device.
+    /// Default implementation is a no-op.
+    fn commit(&self, _byte_offset: usize) -> DeviceResult<()> {
         Ok(())
     }
+
+    fn borrow(&self, byte_offset: usize, len: usize) -> DeviceResult<RwLockReadGuard<'_, Vec<u8>>>;
+    fn borrow_mut(&self, byte_offset: usize, len: usize) -> DeviceResult<RwLockWriteGuard<'_, Vec<u8>>>;
 
     /// Read a contiguous slice of bytes from the device at `byte_offset` into `out`.
     fn read(&self, byte_offset: usize, out: &mut [u8]) -> DeviceResult<()>;
@@ -50,6 +54,14 @@ mod tests {
 
         fn endianness(&self) -> Endianness {
             Endianness::Little
+        }
+
+        fn borrow(&self, _byte_offset: usize, _len: usize) -> DeviceResult<RwLockReadGuard<'_, Vec<u8>>> {
+            Err(DeviceError::Unsupported("borrow"))
+        }
+
+        fn borrow_mut(&self, _byte_offset: usize, _len: usize) -> DeviceResult<RwLockWriteGuard<'_, Vec<u8>>> {
+            Err(DeviceError::Unsupported("borrow_mut"))
         }
 
         fn read(&self, _byte_offset: usize, _out: &mut [u8]) -> DeviceResult<()> {

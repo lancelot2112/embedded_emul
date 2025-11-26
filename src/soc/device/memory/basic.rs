@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::RwLock};
+use std::{ops::Range, sync::{RwLock, RwLockReadGuard, RwLockWriteGuard}};
 
 use crate::soc::device::{Device, DeviceError, DeviceResult, Endianness};
 
@@ -33,6 +33,34 @@ impl Device for BasicMemory {
 
     fn endianness(&self) -> Endianness {
         self.endian
+    }
+
+    fn borrow(&self, byte_offset: usize, len: usize) -> DeviceResult<RwLockReadGuard<'_, Vec<u8>>> {
+        let start = byte_offset as usize;
+        let end = start + len;
+        let data = self.bytes.read().map_err(|_| DeviceError::LockPoisoned(format!("read from {}", self.name)))?;
+        if end > data.len() {
+            return Err(DeviceError::OutOfRange {
+                offset: byte_offset,
+                len,
+                capacity: data.len(),
+            });
+        }
+        Ok(data)
+    }
+
+    fn borrow_mut(&self, byte_offset: usize, len: usize) -> DeviceResult<RwLockWriteGuard<'_, Vec<u8>>> {
+        let start = byte_offset as usize;
+        let end = start + len;
+        let data = self.bytes.write().map_err(|_| DeviceError::LockPoisoned(format!("write to {}", self.name)))?;
+        if end > data.len() {
+            return Err(DeviceError::OutOfRange {
+                offset: byte_offset,
+                len,
+                capacity: data.len(),
+            });
+        }
+        Ok(data)
     }
 
     fn read(&self, byte_offset: usize, out: &mut [u8]) -> DeviceResult<()> {
