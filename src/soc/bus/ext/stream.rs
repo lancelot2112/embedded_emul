@@ -16,7 +16,7 @@ impl ByteDataHandleExt for DataHandle {
         if out.is_empty() {
             return Ok(());
         }
-        self.address_mut().atomic_byte_transact(out.len(), |device, offset, _resolved| {
+        self.address_mut().transact(out.len(), |device, offset, _resolved| {
             device.read(offset, out).into()
         })?;
         Ok(())
@@ -26,7 +26,7 @@ impl ByteDataHandleExt for DataHandle {
         if data.is_empty() {
             return Ok(());
         }
-        self.address_mut().atomic_byte_transact(data.len(), |device, offset, _resolved| {
+        self.address_mut().transact(data.len(), |device, offset, _resolved| {
             device.write(offset, data).into()
         })?;
         Ok(())

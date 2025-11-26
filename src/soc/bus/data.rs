@@ -17,12 +17,16 @@ use crate::soc::device::{
 
 pub struct DataHandle {
     address: AddressHandle,
+    pub cache: u64,
+    pub last_size: usize,
 }
 
 impl DataHandle {
     pub fn new(bus: Arc<DeviceBus>) -> Self {
         Self {
             address: AddressHandle::new(bus),
+            cache: 0,
+            last_size: 0,
         }
     }
 
@@ -39,25 +43,31 @@ impl DataHandle {
     }
 
     // Scalar endianness interface -------------------------------------------------
-    pub fn read_data(&mut self, size: usize) -> BusResult<u64> {
+    pub fn fetch(&mut self, size: usize) -> BusResult<u64> {
         assert!((1..=8).contains(&size));
         let mut buf = [0u8; 8];
 
-        self.address.atomic_byte_transact(size, |device, offset, _| {
+        self.address.transact(size, |device, offset, _| {
             let window = &mut buf[..size];
             device.read(offset, window).map_err(map_device_err)?;
             device.endianness().to_native_mut(window);
             Ok(())
         })?;
 
-        Ok(u64::from_ne_bytes(buf))
+        self.last_size = size;
+        self.cache = u64::from_ne_bytes(buf);
+        Ok(self.cache)
+    }
+
+    pub fn commit(&mut self) -> BusResult<()> {
+
     }
 
     pub fn write_data(&mut self, value: u64, size: usize) -> BusResult<()> {
         assert!((1..=8).contains(&size));
         let mut buf = value.to_ne_bytes();
 
-        self.address.atomic_byte_transact(size, |device, offset, _| {
+        self.address.transact(size, |device, offset, _| {
             let window = &mut buf[..size];
             device.endianness().from_native_mut(window);
             device.write(offset, window).map_err(map_device_err)
@@ -92,7 +102,7 @@ mod tests {
         handle.address_mut().jump(0x1000).unwrap();
         handle.write_data(0xDEADBEEF, 4).unwrap();
         handle.address_mut().jump(0x1000).unwrap();
-        let value = handle.read_data(4).unwrap();
+        let value = handle.fetch(4).unwrap();
         assert_eq!(
             value,
             0xDEADBEEF,
@@ -102,7 +112,7 @@ mod tests {
         handle.address_mut().jump(0x2000).unwrap();
         handle.write_data(0xDEADBEEF, 4).unwrap();
         handle.address_mut().jump(0x2000).unwrap();
-        let value = handle.read_data(4).unwrap();
+        let value = handle.fetch(4).unwrap();
         assert_eq!(
             value,
             0xDEADBEEF,
@@ -123,7 +133,7 @@ mod tests {
 
         let mut handle = DataHandle::new(bus);
         handle.address_mut().jump(0x4000).unwrap();
-        let value = handle.read_data(4).unwrap();
+        let value = handle.fetch(4).unwrap();
         assert_eq!(
             value,
             0x12345678,

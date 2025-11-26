@@ -9,6 +9,7 @@
 //! read/write operations against the currently mapped device at the current cursor
 //! position simulating atomicity.
 use std::sync::Arc;
+use smallvec::SmallVec;
 
 use crate::soc::device::{Device, DeviceResult};
 
@@ -88,6 +89,8 @@ impl AddressHandle {
         Ok(())
     }
 
+    //-------- Advance / Retreat / Transact --------------------------------
+    //Advance and retreat adjust the cursor within the currently resolved device
     pub fn advance(&mut self, bytes: usize) -> BusResult<()> {
         let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
         if bytes > active.bytes_remaining() {
@@ -134,15 +137,43 @@ impl AddressHandle {
             .unwrap_or(false)
     }
 
-    pub(crate) fn atomic_bit_transact<F, T>(&mut self, bit_offset: usize, bit_size: usize, op: F) -> BusResult<T>
-    where
-        F: FnOnce(&dyn Device, usize, &ResolvedRange) -> DeviceResult<T>,
-    {
-        let size_bytes = (bit_offset + bit_size).div_ceil(8);
-        self.atomic_byte_transact(size_bytes, op)
+    pub fn lock(&mut self, out: &mut [u8]) -> BusResult<())> {
+        //Do we have a device at our current location
+        let active = self.active.as_mut().ok_or(BusError::HandleNotPositioned)?;
+        //Start a transaction on the device
+        active.resolved.device.start_transact()?;
+
+        //Check our requested size
+        if size > active.bytes_remaining() {
+            let err = Err(BusError::OutOfRange {
+                address: active.bus_address() + size,
+                end: active.resolved.bus_end,
+            });
+            active.resolved.device.end_transact()?;
+            return err;
+        }
+        let mut buf = SmallVec::<[u8; 256]>::with_capacity(size);
+        active.resolved.device.read(active.device_offset(), &mut buf).map_err(|err| {
+            BusError::DeviceFault {
+                device: active.resolved.device.name().to_string(),
+                source: Box::new(err),
+            }
+        })?;
+        Ok(&buf)
     }
 
-    pub(crate) fn atomic_byte_transact<F, T>(&mut self, size: usize, op: F) -> BusResult<T>
+    pub fn unlock(&mut self) -> BusResult<()> {
+        if let Some(active) = self.active.as_mut() {
+            active
+                .resolved
+                .device
+                .end_transact()?;
+            Ok(())
+        } else {
+            Err(BusError::HandleNotPositioned)
+        }
+    }
+    pub(crate) fn transact<F, T>(&mut self, size: usize, op: F) -> BusResult<T>
     where
         F: FnOnce(&dyn Device, usize, &ResolvedRange) -> DeviceResult<T>,
     {
@@ -269,7 +300,7 @@ mod tests {
 
         // transact should execute the closure against the resolved device and advance the cursor.
         let value = handle
-            .atomic_byte_transact(4, |device, offset, _resolved| {
+            .transact(4, |device, offset, _resolved| {
                 let write_bytes = 0xAABB_CCDD_u32.to_le_bytes();
                 device.write(offset, &write_bytes)?;
                 let mut out = [0u8; 4];

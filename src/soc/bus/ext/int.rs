@@ -38,19 +38,19 @@ impl IntDataHandleExt for DataHandle {
     }
 
     fn read_u8(&mut self) -> BusResult<u8> {
-        self.read_data(1).map(|val| val as u8)
+        self.fetch(1).map(|val| val as u8)
     }
 
     fn read_u16(&mut self) -> BusResult<u16> {
-        self.read_data(2).map(|val| val as u16)
+        self.fetch(2).map(|val| val as u16)
     }
 
     fn read_u32(&mut self) -> BusResult<u32> {
-        self.read_data(4).map(|val| val as u32)
+        self.fetch(4).map(|val| val as u32)
     }
 
     fn read_u64(&mut self) -> BusResult<u64> {
-        self.read_data(8)
+        self.fetch(8)
     }
 
     fn write_u8(&mut self, value: u8) -> BusResult<()> {

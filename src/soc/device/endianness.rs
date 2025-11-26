@@ -26,12 +26,12 @@ impl Endianness {
         }
         match self {
             Endianness::Little => {
-                if cfg!(target_endian = "big") {
+                if Self::native() == Endianness::Big {
                     bytes.reverse();
                 }
             }
             Endianness::Big => {
-                if cfg!(target_endian = "little") {
+                if Self::native() == Endianness::Little {
                     bytes.reverse();
                 } 
             }
