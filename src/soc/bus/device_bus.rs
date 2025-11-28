@@ -280,10 +280,10 @@ impl DeviceBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{BasicMemory, Endianness};
+    use crate::soc::device::{RamMemory, Endianness};
 
-    fn make_memory(name: &str, size: usize) -> Arc<BasicMemory> {
-        Arc::new(BasicMemory::new(name.to_string(), size, Endianness::Little))
+    fn make_memory(name: &str, size: usize) -> Arc<RamMemory> {
+        Arc::new(RamMemory::new(name.to_string(), size, Endianness::Little))
     }
 
     #[test]

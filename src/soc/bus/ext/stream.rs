@@ -99,13 +99,13 @@ fn io_error(err: BusError) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{BasicMemory, Device, Endianness};
+    use crate::soc::device::{RamMemory, Device, Endianness};
     use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
-    fn make_handle() -> (DataHandle, Arc<BasicMemory>) {
+    fn make_handle() -> (DataHandle, Arc<RamMemory>) {
         let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(BasicMemory::new("ram", 0x40, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("ram", 0x40, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
         let mut handle = DataHandle::new(bus);
         handle.address_mut().jump(0).unwrap();

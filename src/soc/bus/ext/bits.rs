@@ -57,13 +57,13 @@ fn mask_bits(bitlen: usize) -> u64 {
 mod tests {
     use std::sync::Arc;
 
-    use crate::soc::{bus::{AddressHandle, DeviceBus}, device::{BasicMemory, Device, Endianness}};
+    use crate::soc::{bus::{AddressHandle, DeviceBus}, device::{RamMemory, Device, Endianness}};
 
     use super::*;
      #[test]
     fn bit_reads_handle_offsets() {
         let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(BasicMemory::new("ram", 0x20, Endianness::Big));
+        let memory = Arc::new(RamMemory::new("ram", 0x20, Endianness::Big));
         bus.register_device(memory.clone(), 0).unwrap();
         memory.write(0, &[0x12, 0x34]).expect("seed memory");
 
@@ -80,7 +80,7 @@ mod tests {
     #[test]
     fn bit_writes_update_partial_ranges() {
         let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(BasicMemory::new("ram", 0x20, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("ram", 0x20, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
         memory.write(0, &[0x00, 0xFF]).expect("seed memory");
 

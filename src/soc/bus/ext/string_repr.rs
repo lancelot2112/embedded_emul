@@ -27,13 +27,13 @@ impl StringReprDataHandleExt for DataHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{BasicMemory, Device, Endianness};
+    use crate::soc::device::{RamMemory, Device, Endianness};
     use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {
         let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(BasicMemory::new("rom", 0x20, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("rom", 0x20, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
         memory.write(0, bytes).unwrap();
         let mut handle = DataHandle::new(bus);

@@ -7,7 +7,7 @@ pub mod range;
 pub mod symbol;
 
 pub use address::AddressHandle;
-pub use data::DataHandle;
+pub use data::{DataHandle, ScalarHandle};
 pub use device_bus::DeviceBus;
 pub use error::{BusError, BusResult};
 pub use symbol::{SymbolAccessError, SymbolHandle, SymbolValue};

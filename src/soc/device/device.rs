@@ -4,6 +4,8 @@
 //! `BusError::DeviceFault`.
 use std::{ops::Range, sync::{RwLockReadGuard, RwLockWriteGuard}};
 
+use crate::soc::device::RamMemory;
+
 use super::{endianness::Endianness, error::DeviceResult};
 
 pub trait Device: Send + Sync {
@@ -17,24 +19,29 @@ pub trait Device: Send + Sync {
     
     /// Reserve a byte range on the device for atomic access.
     /// Default implementation is a no-op.
-    fn reserve(&self, _byte_offset: usize, _len: usize) -> DeviceResult<()> {
+    fn lock(&self, _byte_offset: usize, _len: usize) -> DeviceResult<()> {
         Ok(())
     }
 
     /// Commit a previously reserved byte range on the device.
     /// Default implementation is a no-op.
-    fn commit(&self, _byte_offset: usize) -> DeviceResult<()> {
+    fn unlock(&self, _byte_offset: usize) -> DeviceResult<()> {
         Ok(())
     }
 
-    fn borrow(&self, byte_offset: usize, len: usize) -> DeviceResult<RwLockReadGuard<'_, Vec<u8>>>;
-    fn borrow_mut(&self, byte_offset: usize, len: usize) -> DeviceResult<RwLockWriteGuard<'_, Vec<u8>>>;
+    // No Copy slices for reading data without allocation 
+    fn peek(&self, offset: usize, len: usize) -> &[u8];
+
+    // Fast path pointer access
+    fn as_ram(&self) -> Option<&RamMemory> { None }
+    fn as_ram_mut(&mut self) -> Option<&mut RamMemory> { None }
 
     /// Read a contiguous slice of bytes from the device at `byte_offset` into `out`.
-    fn read(&self, byte_offset: usize, out: &mut [u8]) -> DeviceResult<()>;
+    /// Reads may mutate if the device has side effects on read (clear bit on read)
+    fn read(&mut self, offset: usize, out: &mut [u8]) -> DeviceResult<()>;
 
     /// Write a contiguous slice of bytes to the device at `byte_offset` from `data`.
-    fn write(&self, byte_offset: usize, data: &[u8]) -> DeviceResult<()>;
+    fn write(&mut self, offset: usize, data: &[u8]) -> DeviceResult<()>;
 }
 
 #[cfg(test)]
@@ -58,26 +65,22 @@ mod tests {
             Endianness::Little
         }
 
-        fn borrow(&self, _byte_offset: usize, _len: usize) -> DeviceResult<RwLockReadGuard<'_, Vec<u8>>> {
-            Err(DeviceError::Unsupported("borrow"))
+        fn peek(&self, _offset: usize, _len: usize) -> &[u8] {
+            &[]
         }
 
-        fn borrow_mut(&self, _byte_offset: usize, _len: usize) -> DeviceResult<RwLockWriteGuard<'_, Vec<u8>>> {
-            Err(DeviceError::Unsupported("borrow_mut"))
-        }
-
-        fn read(&self, _byte_offset: usize, _out: &mut [u8]) -> DeviceResult<()> {
+        fn read(&mut self, _byte_offset: usize, _out: &mut [u8]) -> DeviceResult<()> {
             Err(DeviceError::Unsupported("read"))
         }
 
-        fn write(&self, _byte_offset: usize, _data: &[u8]) -> DeviceResult<()> {
+        fn write(&mut self, _byte_offset: usize, _data: &[u8]) -> DeviceResult<()> {
             Err(DeviceError::Unsupported("write"))
         }
     }
 
     #[test]
     fn trait_helpers_propagate_device_errors() {
-        let dev = FaultyDevice;
+        let mut dev = FaultyDevice;
         let mut buf = [0u8; 4];
         assert!(
             dev.read(0, &mut buf).is_err(),

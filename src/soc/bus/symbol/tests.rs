@@ -1,7 +1,7 @@
 //! Targeted tests verifying symbol-backed reads and traversal behaviour.
 
 use super::*;
-use crate::soc::device::{BasicMemory, Device, Endianness as DeviceEndianness};
+use crate::soc::device::{RamMemory, Device, Endianness as DeviceEndianness};
 use crate::soc::prog::symbols::SymbolTable;
 use crate::soc::prog::symbols::symbol::SymbolState;
 use crate::soc::prog::symbols::walker::ValueKind;
@@ -16,9 +16,9 @@ use crate::soc::prog::types::scalar::{
 use crate::soc::bus::DeviceBus;
 use std::sync::Arc;
 
-fn make_bus(size: usize) -> (Arc<DeviceBus>, Arc<BasicMemory>) {
+fn make_bus(size: usize) -> (Arc<DeviceBus>, Arc<RamMemory>) {
     let bus = Arc::new(DeviceBus::new(8));
-    let memory = Arc::new(BasicMemory::new("ram", size, DeviceEndianness::Little));
+    let memory = Arc::new(RamMemory::new("ram", size, DeviceEndianness::Little));
     bus.register_device(memory.clone(), 0).unwrap();
     (bus, memory)
 }

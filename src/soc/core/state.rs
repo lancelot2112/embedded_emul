@@ -3,7 +3,7 @@ use std::io::{Write};
 
 
 use crate::soc::core::specification::{CoreSpec, RegisterSpec};
-use crate::soc::device::BasicMemory;
+use crate::soc::device::RamMemory;
 use crate::soc::bus::{BusError, DataHandle, DeviceBus};
 use crate::soc::bus::ext::BitDataHandleExt;
 /// Comprehensive processor snapshot referencing a local device bus so higher
@@ -11,7 +11,7 @@ use crate::soc::bus::ext::BitDataHandleExt;
 pub struct CoreState {
     spec: Arc<CoreSpec>,
     bus: Arc<DeviceBus>,
-    memory: Arc<BasicMemory>,
+    memory: Arc<RamMemory>,
     registers: HashMap<String, RegisterLayout>,
     handle: DataHandle,
 }
@@ -22,7 +22,7 @@ impl CoreState {
         // Registers are modeled as bit slices with LSB-indexed offsets regardless of the
         // architecture's external byte order, so keep their backing store little endian to
         // make bitfield access predictable.
-        let memory = Arc::new(BasicMemory::new(
+        let memory = Arc::new(RamMemory::new(
             format!("{}_state", spec.name()),
             byte_len,
             crate::soc::device::Endianness::native(),
@@ -53,7 +53,7 @@ impl CoreState {
         &self.bus
     }
 
-    pub fn memory(&self) -> &Arc<BasicMemory> {
+    pub fn memory(&self) -> &Arc<RamMemory> {
         &self.memory
     }
 

@@ -1,10 +1,10 @@
 //! Integer helpers that perform width-aware reads and sign/zero extension on top of `DataHandle`.
 
-use crate::soc::bus::{BusError, BusResult, DataHandle};
-use super::bits::BitDataHandleExt;
+use crate::soc::bus::{BusError, BusResult, ScalarHandle};
+use super::bits::BitScalarHandleExt;
 
 /// Trait adding width-aware integer reads directly on top of `DataHandle`.
-pub trait IntDataHandleExt {
+pub trait IntScalarHandleExt {
     fn read_unsigned(&mut self, bit_off: u8, width_bits: usize) -> BusResult<u64>;
     fn read_signed(&mut self, bit_off: u8, width_bits: usize) -> BusResult<i64>;
     fn write_unsigned(&mut self, bit_off: u8, width_bits: usize, value: u64) -> BusResult<()>;
@@ -20,7 +20,7 @@ pub trait IntDataHandleExt {
     fn write_u64(&mut self, value: u64) -> BusResult<()>;
 }
 
-impl IntDataHandleExt for DataHandle {
+impl IntScalarHandleExt for ScalarHandle<'_> {
     fn read_unsigned(&mut self, bit_off: u8, width_bits: usize) -> BusResult<u64> {
         ensure_width(width_bits)?;
         self.read_bits(bit_off, width_bits as u16)
@@ -94,13 +94,13 @@ fn ensure_width(width_bits: usize) -> BusResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{BasicMemory, Endianness as DeviceEndianness};
+    use crate::soc::device::{RamMemory, Endianness as DeviceEndianness};
     use crate::soc::bus::{DeviceBus, ext::stream::ByteDataHandleExt};
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {
         let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(BasicMemory::new("ram", 0x20, DeviceEndianness::Little));
+        let memory = Arc::new(RamMemory::new("ram", 0x20, DeviceEndianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
         let mut preload = DataHandle::new(bus.clone());
         preload.address_mut().jump(0).unwrap();

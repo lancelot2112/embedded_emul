@@ -102,7 +102,7 @@ impl<'a> DataHandle<'a> {
         start: usize,
         len: usize,
     ) -> BusResult<Self> {
-        device.reserve(start, len)?;
+        device.lock(start, len)?;
         Ok(Self { device, start, len})
     }
 
@@ -143,40 +143,40 @@ impl<'a> DataHandle<'a> {
 impl Drop for DataHandle<'_> {
     fn drop(&mut self) {
         // ignore errors on drop; handle logs if you need them
-        let _ = self.device.commit(self.start);
+        let _ = self.device.unlock(self.start);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{BasicMemory, Endianness};
+    use crate::soc::device::{RamMemory, Endianness};
     use crate::soc::bus::DeviceBus;
 
     #[test]
     fn read_write_round_trip() {
         let bus = Arc::new(DeviceBus::new(12));
-        let memory = Arc::new(BasicMemory::new("ram", 0x1000, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("ram", 0x1000, Endianness::Little));
         bus.register_device(memory, 0x1000).unwrap();
 
-        let be_memory = Arc::new(BasicMemory::new("be_ram", 0x1000, Endianness::Big));
+        let be_memory = Arc::new(RamMemory::new("be_ram", 0x1000, Endianness::Big));
         bus.register_device(be_memory, 0x2000).unwrap();
 
-        let mut addr = AddressHandle::new(bus);
-        addr.jump(0x1000).expect("valid address");
+        let mut cursor = AddressHandle::new(bus);
+        cursor.jump(0x1000).expect("valid address");
         {
-            let mut scalar = addr.scalar_handle(4).expect("pin is valid");
+            let mut scalar = cursor.scalar_handle(4).expect("pin is valid");
             scalar.write(0xDEADBEEF).expect("write succeeds");
             let cached = scalar.read().expect("read cached value");
             assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
         }
         assert_eq!(
-            addr.bus_address(),
+            cursor.bus_address(),
             Some(0x1004),
             "cursor should advance by the scalar size"
         );
-        addr.jump(0x1000).unwrap();
-        let value = addr.scalar_handle(4).expect("pin is valid").read().expect("read succeeds");
+        cursor.jump(0x1000).unwrap();
+        let value = cursor.scalar_handle(4).expect("pin is valid").read().expect("read succeeds");
         assert_eq!(
             value,
             0xDEADBEEF,
@@ -184,20 +184,20 @@ mod tests {
         );
 
 
-        addr.jump(0x2000).expect("valid address");
+        cursor.jump(0x2000).expect("valid address");
         {
-            let mut scalar = addr.scalar_handle(4).expect("pin is valid");
+            let mut scalar = cursor.scalar_handle(4).expect("pin is valid");
             scalar.write(0xDEADBEEF).expect("write succeeds");
             let cached = scalar.read().expect("read cached value");
             assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
         }
         assert_eq!(
-            addr.bus_address(),
+            cursor.bus_address(),
             Some(0x2004),
             "cursor should advance by the scalar size"
         );
-        addr.jump(0x2000).unwrap();
-        let value = addr.scalar_handle(4).expect("pin is valid").read().expect("read succeeds");
+        cursor.jump(0x2000).unwrap();
+        let value = cursor.scalar_handle(4).expect("pin is valid").read().expect("read succeeds");
         assert_eq!(
             value,
             0xDEADBEEF,
@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn redirect_allows_alias_reads() {
         let bus = Arc::new(DeviceBus::new(10));
-        let memory = Arc::new(BasicMemory::new("flash", 0x2000, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("flash", 0x2000, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
 
         let mut addr = AddressHandle::new(bus.clone());

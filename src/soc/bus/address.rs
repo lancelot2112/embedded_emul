@@ -157,13 +157,13 @@ impl AddressHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{BasicMemory, Endianness};
+    use crate::soc::device::{RamMemory, Endianness};
     use crate::soc::bus::DeviceBus;
     use std::sync::Arc;
 
     fn make_bus() -> Arc<DeviceBus> {
         let bus = Arc::new(DeviceBus::new(12));
-        let memory = Arc::new(BasicMemory::new("ram", 0x2000, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("ram", 0x2000, Endianness::Little));
         bus.register_device(memory, 0x1000).unwrap();
         bus
     }
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn transact_performs_operation_and_advances() {
         let bus = Arc::new(DeviceBus::new(12));
-        let memory = Arc::new(BasicMemory::new("ram", 0x2000, Endianness::Little));
+        let memory = Arc::new(RamMemory::new("ram", 0x2000, Endianness::Little));
         bus.register_device(memory.clone(), 0x2000).unwrap();
         let mut addr = AddressHandle::new(bus);
         addr.jump(0x2000).unwrap();
