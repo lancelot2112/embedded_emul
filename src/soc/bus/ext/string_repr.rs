@@ -1,22 +1,22 @@
 //! Helpers for building printable representations from bus data.
 
-use crate::soc::bus::{BusResult, DataTxn, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{BusResult, CursorBehavior, DataView};
 
-pub trait StringReprDataHandleExt {
+pub trait StringReprDataViewExt {
     fn read_hex(&mut self, length: usize) -> BusResult<String>;
     fn read_ascii(&mut self, length: usize) -> BusResult<String>;
 }
 
-impl StringReprDataHandleExt for DataTxn {
+impl StringReprDataViewExt for DataView {
     fn read_hex(&mut self, length: usize) -> BusResult<String> {
         let mut buf = vec![0u8; length];
-        self.stream_out(&mut buf)?;
+        self.read(&mut buf)?;
         Ok(buf.iter().map(|b| format!("{b:02X}")).collect())
     }
 
     fn read_ascii(&mut self, length: usize) -> BusResult<String> {
         let mut buf = vec![0u8; length];
-        self.stream_out(&mut buf)?;
+        self.read(&mut buf)?;
         Ok(buf
             .into_iter()
             .map(|b| if b.is_ascii_graphic() { b as char } else { '.' })
@@ -27,18 +27,16 @@ impl StringReprDataHandleExt for DataTxn {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::bus::DeviceBus;
-    use crate::soc::device::{Device, Endianness, RamMemory};
-    use std::sync::Arc;
+    use crate::soc::bus::{DeviceBus, StaticCursor};
+    use crate::soc::device::{AccessContext, Device, Endianness, RamMemory};
 
-    fn make_handle(bytes: &[u8]) -> DataTxn {
-        let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(RamMemory::new("rom", 0x20, Endianness::Little));
-        bus.register_device(memory.clone(), 0).unwrap();
-        memory.write(0, bytes).unwrap();
-        let mut handle = DataTxn::new(bus);
-        handle.address_mut().jump(0).unwrap();
-        handle
+    fn make_handle(bytes: &[u8]) -> DataView{
+        let mut bus = DeviceBus::new();
+        let mut memory = RamMemory::new("rom", 0x40, Endianness::Little);
+        memory.write(0, bytes, AccessContext::DEBUG).unwrap();
+        bus.map_device(memory, 0, 0).unwrap();
+        let handle = bus.resolve(0).unwrap();
+        DataView::new(handle, AccessContext::CPU)
     }
 
     #[test]

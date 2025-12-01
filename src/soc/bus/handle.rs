@@ -8,8 +8,6 @@
 //! It also provides a `transact` method that simplifies performing
 //! read/write operations against the currently mapped device at the current cursor
 //! position simulating atomicity.
-use std::io::Cursor;
-
 use crate::soc::{
     bus::DeviceRef,
     device::{AccessContext, Endianness},
@@ -17,36 +15,7 @@ use crate::soc::{
 
 use super::error::{BusError, BusResult};
 
-pub struct AdvancingCursor;
-pub struct StaticCursor;
-pub trait CursorBehavior {
-    fn adv_cursor(offset: usize, delta: usize) -> usize;
-    fn ret_cursor(offset: usize, delta: usize) -> usize;
-}
-
-impl CursorBehavior for AdvancingCursor {
-    #[inline(always)]
-    fn adv_cursor(offset: usize, delta: usize) -> usize {
-        offset.saturating_add(delta)
-    }
-    #[inline(always)]
-    fn ret_cursor(offset: usize, delta: usize) -> usize {
-        offset.saturating_sub(delta)
-    }
-}
-
-impl CursorBehavior for StaticCursor {
-    #[inline(always)]
-    fn adv_cursor(offset: usize, _delta: usize) -> usize {
-        offset
-    }
-    #[inline(always)]
-    fn ret_cursor(offset: usize, _delta: usize) -> usize {
-        offset
-    }
-}
-
-pub struct DeviceHandle {
+pub struct DeviceHandle{
     device: DeviceRef,
     endian: Endianness,
     pin: usize,
@@ -69,18 +38,18 @@ impl DeviceHandle {
         }
     }
     // Functional access (advances cursor if needed, though usually fixed width)
-    pub fn read<C: CursorBehavior>(&mut self, out: &mut [u8], ctx: AccessContext) -> BusResult<()> {
+    pub fn read(&mut self, out: &mut [u8], ctx: AccessContext) -> BusResult<()> {
         //Reads could mutate the underlying
         let mut dev = self.device.lock()?;
         dev.read(self.offset, out, ctx)?;
-        self.offset = C::adv_cursor(self.offset, out.len());
+        self.offset = self.offset.saturating_add(out.len());
         Ok(())
     }
 
-    pub fn write<C: CursorBehavior>(&mut self, data: &[u8], ctx: AccessContext) -> BusResult<()> {
+    pub fn write(&mut self, data: &[u8], ctx: AccessContext) -> BusResult<()> {
         //DeviceRef is Arc<RwLock<dyn Device>>
         self.device.lock()?.write(self.offset, data, ctx)?;
-        self.offset = C::adv_cursor(self.offset, data.len());
+        self.offset = self.offset.saturating_add(data.len());
         Ok(())
     }
 
@@ -124,12 +93,11 @@ impl DeviceHandle {
         Ok(())
     }
 
-    // Advance or retreate cursor relative to the current cursor.
-    #[inline(always)]
-    pub fn undo<C: CursorBehavior>(&mut self, delta: usize) -> BusResult<()> {
-        self.offset = C::ret_cursor(self.offset, delta);
-        Ok(())
+    pub fn reset(&mut self) {
+        self.offset = self.pin;
     }
+
+    // Advance or retreate cursor relative to the current cursor.
     pub fn seek(&mut self, new_offset: usize) -> BusResult<()> {
         if new_offset >= self.size {
             self.offset = self.size;
@@ -191,6 +159,11 @@ impl DeviceHandle {
     #[inline(always)]
     pub fn get_endianness(&self) -> Endianness {
         self.endian
+    }
+
+    #[inline(always)]
+    pub fn get_device_name(&self) -> String {
+        self.device.lock().unwrap().name().to_string()
     }
 }
 

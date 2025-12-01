@@ -1,13 +1,13 @@
 //! Floating point helpers layered on top of `DataHandle`.
 
-use crate::soc::bus::{BusResult, data::DataView, handle::CursorBehavior};
+use crate::soc::bus::{BusResult, data::DataView};
 
 pub trait FloatDataViewExt {
     fn read_f32(&mut self) -> BusResult<f32>;
     fn read_f64(&mut self) -> BusResult<f64>;
 }
 
-impl<C: CursorBehavior> FloatDataViewExt for DataView<C> {
+impl FloatDataViewExt for DataView {
     fn read_f32(&mut self) -> BusResult<f32> {
         let bits = self.read_u32()?;
         Ok(f32::from_bits(bits))
@@ -23,17 +23,16 @@ impl<C: CursorBehavior> FloatDataViewExt for DataView<C> {
 mod tests {
     use super::*;
     use crate::soc::bus::DeviceBus;
-    use crate::soc::device::{Device, Endianness as DeviceEndianness, RamMemory};
-    use std::sync::Arc;
+    use crate::soc::device::{AccessContext, Device, Endianness as DeviceEndianness, RamMemory};
 
-    fn make_handle(bytes: &[u8]) -> DataTxn {
-        let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(RamMemory::new("ram", 0x20, DeviceEndianness::Little));
-        bus.register_device(memory.clone(), 0).unwrap();
-        memory.write(0, bytes).unwrap();
-        let mut handle = DataTxn::new(bus);
-        handle.address_mut().jump(0).unwrap();
-        handle
+    fn make_handle(bytes: &[u8]) -> DataView {
+        let mut bus = DeviceBus::new();
+        let mut memory = RamMemory::new("ram", 0x20, DeviceEndianness::Little);
+        memory.write(0, bytes, AccessContext::DEBUG).unwrap();
+        bus.map_device(memory, 0, 0).unwrap();        
+        let handle = bus.resolve(0).unwrap();
+        let view = DataView::new(handle, AccessContext::CPU);
+        view
     }
 
     #[test]

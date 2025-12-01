@@ -10,7 +10,7 @@ pub trait SignedDataViewExt {
     fn read_i64(&mut self) -> BusResult<i64>;
 }
 
-impl<C: CursorBehavior> SignedDataViewExt for DataView<C> {
+impl SignedDataViewExt for DataView {
     fn read_i8(&mut self) -> BusResult<i8> {
         let raw = self.read_u8()?;
         Ok(raw as i8)
@@ -32,16 +32,16 @@ impl<C: CursorBehavior> SignedDataViewExt for DataView<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::bus::{DeviceBus, ext::stream::ByteDataHandleExt};
-    use crate::soc::device::{Endianness as DeviceEndianness, RamMemory};
+    use crate::soc::bus::{DeviceBus};
+    use crate::soc::device::{AccessContext, Endianness as DeviceEndianness, RamMemory};
 
     fn make_handle(bytes: &[u8]) -> DataView {
-        let bus = DeviceBus::new();
-        let memory = RamMemory::new("ram", 0x20, DeviceEndianness::Little);
-        bus.register_device(memory.clone(), 0).unwrap();
+        let mut bus = DeviceBus::new();
+        let mut memory = RamMemory::new("ram", 0x20, DeviceEndianness::Little);
+        bus.map_device(memory, 0, 0).unwrap();
         let mut handle = bus.resolve(0).unwrap();
-        handle.write::<StaticCursor>(bytes, AccessContext::DEBUG).expect("write preload");
-        DataView::<StaticCursor>::new(handle, AccessContext::CPU)
+        handle.write(bytes, AccessContext::DEBUG).expect("write preload");
+        DataView::new(handle, AccessContext::CPU)
     }
 
     #[test]

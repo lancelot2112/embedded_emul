@@ -3,11 +3,10 @@
 use std::borrow::Cow;
 
 use crate::soc::bus::{
-    BusResult, DataTxn,
-    ext::{int::IntDataHandleExt, stream::ByteDataHandleExt},
+    BusResult, CursorBehavior, DataView 
 };
 
-pub trait StringDataHandleExt {
+pub trait StringDataViewExt {
     /// Reads a fixed-length UTF-8 string, stopping early at the first nul byte.
     fn read_utf8(&mut self, len: usize) -> BusResult<String>;
 
@@ -15,10 +14,10 @@ pub trait StringDataHandleExt {
     fn read_c_string(&mut self, max_len: usize) -> BusResult<String>;
 }
 
-impl StringDataHandleExt for DataTxn {
+impl StringDataViewExt for DataView {
     fn read_utf8(&mut self, len: usize) -> BusResult<String> {
         let mut buf = vec![0u8; len];
-        self.stream_out(&mut buf)?;
+        self.read(&mut buf)?;
         Ok(trim_nul(Cow::Borrowed(buf.as_slice())).into_owned())
     }
 
@@ -52,17 +51,15 @@ fn trim_nul(data: Cow<'_, [u8]>) -> Cow<'_, str> {
 mod tests {
     use super::*;
     use crate::soc::bus::DeviceBus;
-    use crate::soc::device::{Device, Endianness, RamMemory};
-    use std::sync::Arc;
+    use crate::soc::device::{AccessContext, Device, Endianness, RamMemory};
 
-    fn prepare_handle(bytes: &[u8]) -> DataTxn {
-        let bus = Arc::new(DeviceBus::new(8));
-        let memory = Arc::new(RamMemory::new("rom", 0x40, Endianness::Little));
-        bus.register_device(memory.clone(), 0).unwrap();
-        memory.write(0, bytes).unwrap();
-        let mut handle = DataTxn::new(bus);
-        handle.address_mut().jump(0).unwrap();
-        handle
+    fn prepare_handle(bytes: &[u8]) -> DataView {
+        let mut bus = DeviceBus::new();
+        let mut memory = RamMemory::new("rom", 0x40, Endianness::Little);
+        memory.write(0, bytes, AccessContext::DEBUG).unwrap();
+        bus.map_device(memory, 0, 0).unwrap();
+        let handle = bus.resolve(0).unwrap();
+        DataView::new(handle, AccessContext::CPU)
     }
 
     #[test]

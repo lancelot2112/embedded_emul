@@ -1,36 +1,33 @@
 //! Direct memory access wrapper layered on DeviceHandle offering scalar helpers
 //! and std::io traits for interacting with DeviceBus-backed memory regions.
 //! Handles device specifics and exposes a consistent BusResult error surface.
-use std::io::BufReader;
-
 use super::{error::BusResult, handle::DeviceHandle};
 
 use crate::soc::{
-    bus::handle::CursorBehavior,
     device::{AccessContext,Endianness},
 };
 
-pub struct DataView<C: CursorBehavior> {
+pub struct DataView {
     handle: DeviceHandle,
     context: AccessContext,
-    cursor_behavior: std::marker::PhantomData<C>,
 }
 
-impl<C: CursorBehavior> DataView<C> {
+impl DataView {
     pub fn new(handle: DeviceHandle, context: AccessContext) -> Self {
         Self {
             handle,
             context,
-            cursor_behavior: std::marker::PhantomData,
         }
     }
 
+    #[inline(always)]
     pub fn read(&mut self, out: &mut [u8]) -> BusResult<()> {
-        self.handle.read::<C>(out, self.context)
+        self.handle.read(out, self.context)
     }
 
+    #[inline(always)]
     pub fn write(&mut self, data: &[u8]) -> BusResult<()> {
-        self.handle.write::<C>(data, self.context)
+        self.handle.write(data, self.context)
     }
 
     pub fn read_u8(&mut self) -> BusResult<u8> {
@@ -98,12 +95,16 @@ impl<C: CursorBehavior> DataView<C> {
     pub fn get_handle_mut(&mut self) -> &mut DeviceHandle {
         &mut self.handle
     }
+
+    pub fn get_handle(&self) -> &DeviceHandle {
+        &self.handle
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::soc::bus::DeviceBus;
-    use crate::soc::device::{Endianness, RamMemory};
+    use crate::soc::bus::{DataView, DeviceBus};
+    use crate::soc::device::{AccessContext, Endianness, RamMemory};
 
     #[test]
     fn read_write_round_trip() {
@@ -114,9 +115,22 @@ mod tests {
         let be_memory = RamMemory::new("be_ram", 0x1000, Endianness::Big);
         bus.map_device(be_memory, 0x2000, 0).unwrap();
 
-        let mut cursor = bus.resolve(0x1000).expect("valid address");
+        let mut handle = bus.resolve(0x1000).expect("valid address");
+        let mut cursor = DataView::new(handle, AccessContext::CPU);
+        cursor.write_u32(0xDEADBEEF).expect("write succeeds");
+        assert_eq!(cursor.get_handle().get_position(), 4, "cursor should advance");
+
+        let mut handle = bus.resolve(0x1000).expect("valid address");
+
         {
             let mut scalar = cursor.scalar_handle(4).expect("pin is valid");
+            scalar.write(0xDEADBEEF).expect("write succeeds");
+            let cached = scalar.read().expect("read cached value");
+            assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
+        }
+
+        {
+            let mut 
             scalar.write(0xDEADBEEF).expect("write succeeds");
             let cached = scalar.read().expect("read cached value");
             assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
