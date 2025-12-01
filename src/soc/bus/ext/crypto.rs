@@ -1,16 +1,16 @@
 //! Lightweight helpers for reading simple cryptographic primitives.
 
-use crate::soc::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{BusResult, DataTxn, data::DataView, handle::CursorBehavior};
 use sha2::{Digest, Sha256};
 
-pub trait CryptoDataHandleExt {
-    fn calc_sha256(&mut self) -> BusResult<[u8; 32]>;
+pub trait CryptoDataViewExt {
+    fn calc_sha256(&mut self, len: usize) -> BusResult<[u8; 32]>;
 }
 
-impl CryptoDataHandleExt for DataHandle<'_> {
-    fn calc_sha256(&mut self) -> BusResult<[u8; 32]> {
-        let mut buffer = vec![0u8; self.len()];
-        self.stream_out(&mut buffer)?;
+impl<C:CursorBehavior> CryptoDataViewExt for DataView<C> {
+    fn calc_sha256(&mut self, len: usize) -> BusResult<[u8; 32]> {
+        let mut buffer = vec![0u8; len];
+        self.read(&mut buffer)?;
         let digest = Sha256::digest(&buffer);
         let mut array = [0u8; 32];
         array.copy_from_slice(&digest);
@@ -21,8 +21,8 @@ impl CryptoDataHandleExt for DataHandle<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{RamMemory, Device, Endianness};
-    use crate::soc::bus::{AddressHandle, DeviceBus};
+    use crate::soc::bus::{DeviceBus};
+    use crate::soc::device::{Device, Endianness, RamMemory};
     use hex_literal::hex;
     use std::sync::Arc;
 
@@ -39,7 +39,11 @@ mod tests {
     #[test]
     fn sha256_matches_known_vector() {
         let mut addr = make_handle(b"abc");
-        let digest = addr.data_handle(3).expect("handle").calc_sha256().expect("hash");
+        let digest = addr
+            .data_handle(3)
+            .expect("handle")
+            .calc_sha256()
+            .expect("hash");
         assert_eq!(
             digest,
             hex!("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")

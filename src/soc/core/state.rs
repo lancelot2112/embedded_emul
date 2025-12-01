@@ -1,11 +1,10 @@
+use std::io::Write;
 use std::{collections::HashMap, sync::Arc};
-use std::io::{Write};
 
-
+use crate::soc::bus::ext::BitDataHandleExt;
+use crate::soc::bus::{BusError, DataTxn, DeviceBus};
 use crate::soc::core::specification::{CoreSpec, RegisterSpec};
 use crate::soc::device::RamMemory;
-use crate::soc::bus::{BusError, DataHandle, DeviceBus};
-use crate::soc::bus::ext::BitDataHandleExt;
 /// Comprehensive processor snapshot referencing a local device bus so higher
 /// layers can reuse the existing data-handle abstractions for bitfield access.
 pub struct CoreState {
@@ -13,7 +12,7 @@ pub struct CoreState {
     bus: Arc<DeviceBus>,
     memory: Arc<RamMemory>,
     registers: HashMap<String, RegisterLayout>,
-    handle: DataHandle,
+    handle: DataTxn,
 }
 
 impl CoreState {
@@ -29,7 +28,7 @@ impl CoreState {
         ));
         let bus = Arc::new(DeviceBus::new(LOCAL_BUS_BUCKET_BITS));
         bus.register_device(memory.clone(), 0)?;
-        let mut handle = DataHandle::new(bus.clone());
+        let mut handle = DataTxn::new(bus.clone());
         handle.address_mut().jump(0)?;
         let registers = spec
             .registers()
@@ -57,7 +56,7 @@ impl CoreState {
         &self.memory
     }
 
-    pub fn data_handle(&mut self) -> &mut DataHandle {
+    pub fn data_handle(&mut self) -> &mut DataTxn {
         &mut self.handle
     }
 
@@ -256,12 +255,8 @@ mod tests {
         );
         let mut state = CoreState::new(descriptor).expect("core state");
 
-        state
-            .write_register("reg::CR0", 0xF)
-            .expect("write cr0");
-        state
-            .write_register("reg::CR1", 0x5)
-            .expect("write cr1");
+        state.write_register("reg::CR0", 0xF).expect("write cr0");
+        state.write_register("reg::CR1", 0x5).expect("write cr1");
 
         let cr0 = state.read_register("reg::CR0").expect("read cr0");
         let cr1 = state.read_register("reg::CR1").expect("read cr1");

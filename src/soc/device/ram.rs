@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::soc::device::{Device, DeviceError, DeviceResult, Endianness};
+use crate::soc::device::{AccessContext, Device, DeviceError, DeviceResult, Endianness};
 
 pub struct RamMemory {
     name: String,
@@ -13,7 +13,7 @@ impl RamMemory {
     pub fn new(name: impl Into<String>, len: usize, endian: Endianness) -> Self {
         Self {
             name: name.into(),
-            bytes: vec![0_u8; len+7], //Add 7 bytes to allow a u64 read up to the end of the array.
+            bytes: vec![0_u8; len + 7], //Add 7 bytes to allow a u64 read up to the end of the array.
             len,
             endian,
         }
@@ -42,23 +42,14 @@ impl Device for RamMemory {
         &self.name
     }
 
-    
     #[inline(always)]
     fn span(&self) -> Range<usize> {
         0..self.len()
     }
 
-    
     #[inline(always)]
     fn endianness(&self) -> Endianness {
         self.endian
-    }
-
-    #[inline(always)]
-    fn peek(&self, offset: usize, len: usize) -> &[u8] {
-        let end = offset + len;
-        debug_assert!(end <= self.len, "Out of range slice requested from RamMemory");
-        &self.bytes[offset .. end]
     }
 
     #[inline(always)]
@@ -71,7 +62,7 @@ impl Device for RamMemory {
         Some(self)
     }
 
-    fn read(&mut self, offset: usize, out: &mut [u8]) -> DeviceResult<()> {
+    fn read(&mut self, offset: usize, out: &mut [u8], _ctx: AccessContext) -> DeviceResult<()> {
         if out.is_empty() {
             return Ok(());
         }
@@ -87,7 +78,7 @@ impl Device for RamMemory {
         Ok(())
     }
 
-    fn write(&mut self, offset: usize, data_in: &[u8]) -> DeviceResult<()> {
+    fn write(&mut self, offset: usize, data_in: &[u8], _ctx: AccessContext) -> DeviceResult<()> {
         if data_in.is_empty() {
             return Ok(());
         }

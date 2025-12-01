@@ -1,8 +1,8 @@
 //! Iterative cursor that walks primitive symbol values and marshals pointer/bitfield helpers.
 
+use crate::soc::bus::{BusError, ext::stream::ByteDataHandleExt};
 use crate::soc::prog::symbols::walker::{SymbolWalkEntry, SymbolWalker, ValueKind};
 use crate::soc::prog::types::arena::TypeArena;
-use crate::soc::bus::{BusError, ext::stream::ByteDataHandleExt};
 
 use super::handle::{Snapshot, SymbolHandle};
 use super::read::{ReadContext, read_type_record};

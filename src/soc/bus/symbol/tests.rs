@@ -1,7 +1,8 @@
 //! Targeted tests verifying symbol-backed reads and traversal behaviour.
 
 use super::*;
-use crate::soc::device::{RamMemory, Device, Endianness as DeviceEndianness};
+use crate::soc::bus::DeviceBus;
+use crate::soc::device::{Device, Endianness as DeviceEndianness, RamMemory};
 use crate::soc::prog::symbols::SymbolTable;
 use crate::soc::prog::symbols::symbol::SymbolState;
 use crate::soc::prog::symbols::walker::ValueKind;
@@ -13,7 +14,6 @@ use crate::soc::prog::types::record::TypeRecord;
 use crate::soc::prog::types::scalar::{
     DisplayFormat, EnumType, EnumVariant, ScalarEncoding, ScalarType,
 };
-use crate::soc::bus::DeviceBus;
 use std::sync::Arc;
 
 fn make_bus(size: usize) -> (Arc<DeviceBus>, Arc<RamMemory>) {

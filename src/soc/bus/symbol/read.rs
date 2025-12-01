@@ -1,18 +1,18 @@
 //! Shared utilities for decoding symbol-backed type records into high-level values.
 
+use crate::soc::bus::DataTxn;
+use crate::soc::bus::ext::{FloatDataHandleExt, IntDataHandleExt, StringDataHandleExt};
 use crate::soc::prog::symbols::walker::SymbolWalkEntry;
 use crate::soc::prog::types::arena::TypeArena;
 use crate::soc::prog::types::bitfield::BitFieldSpec;
 use crate::soc::prog::types::pointer::PointerType;
 use crate::soc::prog::types::record::TypeRecord;
 use crate::soc::prog::types::scalar::{EnumType, FixedScalar, ScalarEncoding, ScalarType};
-use crate::soc::bus::DataHandle;
-use crate::soc::bus::ext::{FloatDataHandleExt, IntDataHandleExt, StringDataHandleExt};
 
 use super::value::{SymbolAccessError, SymbolValue};
 
 pub struct ReadContext<'ctx, 'arena> {
-    pub data: &'ctx mut DataHandle,
+    pub data: &'ctx mut DataTxn,
     pub arena: &'arena TypeArena,
     pub entry: Option<&'ctx SymbolWalkEntry>,
     pub field_address: usize,
@@ -22,7 +22,7 @@ pub struct ReadContext<'ctx, 'arena> {
 
 impl<'ctx, 'arena> ReadContext<'ctx, 'arena> {
     pub fn new(
-        data: &'ctx mut DataHandle,
+        data: &'ctx mut DataTxn,
         arena: &'arena TypeArena,
         entry: Option<&'ctx SymbolWalkEntry>,
         field_address: usize,

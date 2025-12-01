@@ -6,9 +6,7 @@
 
 use crate::soc::isa::error::IsaError;
 use crate::soc::isa::semantics::context::ExecutionContext;
-use crate::soc::isa::semantics::program::{
-    BitSlice, ContextCall, Expr, ExprBinaryOp, ExprUnaryOp,
-};
+use crate::soc::isa::semantics::program::{BitSlice, ContextCall, Expr, ExprBinaryOp, ExprUnaryOp};
 use crate::soc::isa::semantics::value::SemanticValue;
 
 /// Resolves `$context::foo()` style expressions when evaluating semantic IR.
@@ -210,11 +208,7 @@ where
         Ok(SemanticValue::int(sliced as i64))
     }
 
-    fn evaluate_unary(
-        &mut self,
-        op: ExprUnaryOp,
-        expr: &Expr,
-    ) -> Result<SemanticValue, IsaError> {
+    fn evaluate_unary(&mut self, op: ExprUnaryOp, expr: &Expr) -> Result<SemanticValue, IsaError> {
         match op {
             ExprUnaryOp::LogicalNot => {
                 let value = self.eval(expr)?.as_bool()?;

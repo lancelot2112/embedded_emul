@@ -21,7 +21,7 @@ impl Endianness {
     #[inline(always)]
     pub fn to_native_mut(self, bytes: &mut [u8]) {
         assert!(bytes.len() <= MAX_ENDIAN_BYTES, "value exceeds 128 bits");
-        if bytes.len() <= 1{
+        if bytes.len() <= 1 {
             return;
         }
         match self {
@@ -33,7 +33,7 @@ impl Endianness {
             Endianness::Big => {
                 if Self::native() == Endianness::Little {
                     bytes.reverse();
-                } 
+                }
             }
         }
     }
@@ -78,7 +78,7 @@ impl Endianness {
             Endianness::Big => {
                 if cfg!(target_endian = "little") {
                     bytes.reverse();
-                } 
+                }
             }
         }
     }
@@ -94,11 +94,19 @@ mod tests {
         let big = Endianness::Big;
         little.to_native_mut(&mut data);
         little.from_native_mut(&mut data);
-        assert_eq!(data, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], "little endian round trip failed");
+        assert_eq!(
+            data,
+            [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            "little endian round trip failed"
+        );
 
         big.to_native_mut(&mut data);
         big.from_native_mut(&mut data);
-        assert_eq!(data, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08], "big endian round trip failed");
+        assert_eq!(
+            data,
+            [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            "big endian round trip failed"
+        );
 
         let mut data: [u8; 3] = [0x01, 0x02, 0x03];
         little.to_native_mut(&mut data);
@@ -120,10 +128,18 @@ mod tests {
         };
 
         endian.to_native_mut(&mut data);
-        assert_eq!(data, [0x0D, 0x0C, 0x0B, 0x0A], "endianness conversion failed");
+        assert_eq!(
+            data,
+            [0x0D, 0x0C, 0x0B, 0x0A],
+            "endianness conversion failed"
+        );
 
         endian.from_native_mut(&mut data);
-        assert_eq!(data, [0x0A, 0x0B, 0x0C, 0x0D], "endianness reverse conversion failed");
+        assert_eq!(
+            data,
+            [0x0A, 0x0B, 0x0C, 0x0D],
+            "endianness reverse conversion failed"
+        );
     }
 
     #[test]
@@ -136,10 +152,17 @@ mod tests {
         };
 
         endian.to_native_mut(&mut data);
-        assert_eq!(data, [0x0A, 0x0B, 0x0C, 0x0D], "endianness conversion failed");
+        assert_eq!(
+            data,
+            [0x0A, 0x0B, 0x0C, 0x0D],
+            "endianness conversion failed"
+        );
 
         endian.from_native_mut(&mut data);
-        assert_eq!(data, [0x0A, 0x0B, 0x0C, 0x0D], "endianness reverse conversion failed");
+        assert_eq!(
+            data,
+            [0x0A, 0x0B, 0x0C, 0x0D],
+            "endianness reverse conversion failed"
+        );
     }
-
 }

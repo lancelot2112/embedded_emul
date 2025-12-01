@@ -2,12 +2,12 @@
 
 use std::sync::Arc;
 
+use crate::soc::bus::{DataTxn, DeviceBus, ext::stream::ByteDataHandleExt};
 use crate::soc::prog::symbols::walker::SymbolWalker;
 use crate::soc::prog::symbols::{
     SymbolHandle as TableSymbolHandle, SymbolId, SymbolRecord, SymbolTable,
 };
 use crate::soc::prog::types::arena::{TypeArena, TypeId};
-use crate::soc::bus::{DataHandle, DeviceBus, ext::stream::ByteDataHandleExt};
 
 use super::cursor::SymbolValueCursor;
 use super::read::{ReadContext, read_type_record};
@@ -17,14 +17,14 @@ use super::value::{SymbolAccessError, SymbolValue};
 /// Computes typed values for symbols by combining the symbol table with a live bus view.
 pub struct SymbolHandle<'a> {
     pub(super) table: &'a SymbolTable,
-    pub(super) data: DataHandle,
+    pub(super) data: DataTxn,
 }
 
 impl<'a> SymbolHandle<'a> {
     pub fn new(table: &'a SymbolTable, bus: Arc<DeviceBus>) -> Self {
         Self {
             table,
-            data: DataHandle::new(bus),
+            data: DataTxn::new(bus),
         }
     }
 

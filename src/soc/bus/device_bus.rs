@@ -3,347 +3,433 @@
 //! without mutating shared state. It mirrors the .NET BasicHashedDeviceBus logic while
 //! providing Rust-friendly error handling and concurrency semantics.
 use std::{
-    collections::HashMap,
-    sync::{
-        Arc, RwLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
 };
 
-use crate::soc::device::Device;
+use crate::soc::{bus::DeviceHandle, device::Device};
 
 use super::{
     error::{BusError, BusResult},
-    range::{BusRange, RangeKind, ResolvedRange},
+    range::{BusRange, RangeKind},
 };
 
 const DEVICE_PRIORITY: u8 = 0;
 const REDIRECT_PRIORITY: u8 = 10;
 
+pub type DeviceRef = Arc<Mutex<dyn Device>>;
+
+///Implement the device bus, owning device registrations and address mappings
 pub struct DeviceBus {
-    bucket_bits: u8,
-    devices: RwLock<Vec<Arc<dyn Device>>>,
-    name_index: RwLock<HashMap<String, usize>>,
-    buckets: RwLock<HashMap<usize, Vec<BusRange>>>,
-    range_index: RwLock<HashMap<usize, Vec<usize>>>,
-    redirect_index: RwLock<HashMap<(usize, usize), usize>>,
-    next_range_id: AtomicU64,
+    // Linear list of devices, allowing O(1) access by ID
+    devices: Vec<DeviceRef>,
+    // Mapping physical address ranges to Device IDs
+    // Key: Start Address -> (End Address, DeviceId, RemapOffset)
+    map: BTreeMap<usize, BusRange>,
+    next_range_id: usize,
 }
 
 impl DeviceBus {
-    pub fn new(bucket_bits: u8) -> Self {
-        assert!(bucket_bits < 63, "bucket_bits must be < 63");
+    pub fn new() -> Self {
         Self {
-            bucket_bits,
-            devices: RwLock::new(Vec::new()),
-            name_index: RwLock::new(HashMap::new()),
-            buckets: RwLock::new(HashMap::new()),
-            range_index: RwLock::new(HashMap::new()),
-            redirect_index: RwLock::new(HashMap::new()),
-            next_range_id: AtomicU64::new(1),
+            devices: Vec::new(),
+            map: BTreeMap::new(),
+            next_range_id: 0,
         }
     }
 
-    fn bucket_index(&self, address: usize) -> usize {
-        address >> self.bucket_bits
+    pub fn map_device(
+        &mut self,
+        device: impl Device + 'static,
+        address: usize,
+        priority: u8,
+    ) -> BusResult<()> {
+        // Insert into 'devices' then update 'map'.
+        // To handle priority: If ranges overlap, higher priority overrides /splits lower priority ranges.
+        let device_range = device.span();
+        self.devices.push(Arc::new(Mutex::new(device)));
+        let device_id = self.devices.len() - 1;
+        let range = BusRange {
+            bus_start: address,
+            bus_end: address + device_range.len(),
+            device_offset: device_range.start,
+            device_id,
+            priority,
+            kind: super::range::RangeKind::Device,
+        };
+        self.insert_range(range)
     }
 
-    fn insert_segment(&self, entry: &mut Vec<BusRange>, segment: BusRange) -> BusResult<()> {
-        if let Some(conflict) = entry
-            .iter()
-            .find(|existing| existing.priority == segment.priority && existing.overlaps(&segment))
-        {
-            let devices = self.devices.read().unwrap();
-            let details = devices
-                .get(conflict.device_id)
-                .map(|d| format!("conflicts with device '{}'", d.name()))
-                .unwrap_or_else(|| "conflicts with unknown device".into());
-            return Err(BusError::Overlap {
-                address: segment.bus_start,
-                details,
+    pub fn map_range(
+        &mut self,
+        start: usize,
+        len: usize,
+        redirect: usize,
+        priority: u8,
+    ) -> BusResult<()> {
+        if len == 0 {
+            return Err(BusError::RedirectInvalid {
+                source: start,
+                size: len,
+                target: redirect,
+                reason: "zero-length range",
             });
         }
 
-        let pos = entry.iter().position(|existing| {
-            existing.priority < segment.priority
-                || (existing.priority == segment.priority && existing.bus_start > segment.bus_start)
-        });
-        match pos {
-            Some(idx) => entry.insert(idx, segment),
-            None => entry.push(segment),
+        let source_end = start.checked_add(len).ok_or(BusError::RedirectInvalid {
+            source: start,
+            size: len,
+            target: redirect,
+            reason: "source range overflow",
+        })?;
+
+        let target_end = redirect.checked_add(len).ok_or(BusError::RedirectInvalid {
+            source: start,
+            size: len,
+            target: redirect,
+            reason: "target range overflow",
+        })?;
+
+        let target_range = self
+            .range_for_address(redirect)
+            .ok_or(BusError::RedirectInvalid {
+                source: start,
+                size: len,
+                target: redirect,
+                reason: "redirect target is unmapped",
+            })?;
+
+        if target_end > target_range.bus_end {
+            return Err(BusError::RedirectInvalid {
+                source: start,
+                size: len,
+                target: redirect,
+                reason: "redirect spans multiple ranges",
+            });
         }
+
+        let device_offset = target_range.device_offset + (redirect - target_range.bus_start);
+        let range = BusRange {
+            bus_start: start,
+            bus_end: source_end,
+            device_offset,
+            device_id: target_range.device_id,
+            priority,
+            kind: RangeKind::Redirect,
+        };
+        self.insert_range(range)
+    }
+
+    pub fn resolve(&self, address: usize) -> BusResult<DeviceHandle> {
+        let range = self
+            .range_for_address(address)
+            .ok_or(BusError::InvalidAddress { address })?;
+        Ok(DeviceHandle::new(
+            self.devices[range.device_id].clone(),
+            (address - range.bus_start) + range.device_offset,
+        ))
+    }
+
+    pub fn unmap(&mut self, address: usize) -> BusResult<()> {
+        let key = self
+            .range_key_for_address(address)
+            .ok_or(BusError::NotMapped { address })?;
+        self.map.remove(&key);
+        Ok(())
+    }
+}
+
+impl DeviceBus {
+    fn insert_range(&mut self, range: BusRange) -> BusResult<()> {
+        self.clear_overlaps(&range)?;
+        self.map.insert(range.bus_start, range);
         Ok(())
     }
 
-    fn add_range(
-        &self,
-        bus_start: usize,
-        bus_end: usize,
-        device_id: usize,
-        device_offset: usize,
-        priority: u8,
-        kind: RangeKind,
-    ) -> BusResult<usize> {
-        if bus_end <= bus_start {
-            return Err(BusError::Overlap {
-                address: bus_start,
-                details: "range is empty".into(),
-            });
-        }
-
-        let id = self.next_range_id.fetch_add(1, Ordering::Relaxed) as usize;
-        let mut touched = Vec::new();
-        let start_idx = self.bucket_index(bus_start);
-        let end_idx = self.bucket_index(bus_end - 1);
-        let mut buckets = self.buckets.write().unwrap();
-
-        let segment = BusRange {
-            id,
-            bus_start,
-            bus_end,
-            device_offset,
-            device_id,
-            priority,
-            kind,
-        };
-
-        for idx in start_idx..=end_idx {
-            let entry = buckets.entry(idx).or_default();
-            self.insert_segment(entry, segment.clone())?;
-            touched.push(idx);
-        }
-
-        self.range_index.write().unwrap().insert(id, touched);
-        Ok(id)
+    fn range_for_address(&self, address: usize) -> Option<&BusRange> {
+        self.map
+            .range(..=address)
+            .next_back()
+            .and_then(|(_, range)| {
+                if address < range.bus_end {
+                    Some(range)
+                } else {
+                    None
+                }
+            })
     }
 
-    fn remove_range(&self, range_id: usize) -> BusResult<bool> {
-        let bucket_indices = match self.range_index.write().unwrap().remove(&range_id) {
-            Some(indices) => indices,
-            None => return Ok(false),
-        };
+    fn range_key_for_address(&self, address: usize) -> Option<usize> {
+        self.map
+            .range(..=address)
+            .next_back()
+            .and_then(|(start, range)| {
+                if address < range.bus_end {
+                    Some(*start)
+                } else {
+                    None
+                }
+            })
+    }
 
-        let mut buckets = self.buckets.write().unwrap();
-        for idx in bucket_indices {
-            if let Some(vec) = buckets.get_mut(&idx) {
-                vec.retain(|segment| segment.id != range_id);
-                if vec.is_empty() {
-                    buckets.remove(&idx);
+    fn clear_overlaps(&mut self, range: &BusRange) -> BusResult<()> {
+        let keys = self.collect_overlap_keys(range.bus_start, range.bus_end);
+        let mut reinserts = Vec::new();
+
+        for key in keys {
+            if let Some(existing) = self.map.remove(&key) {
+                if existing.bus_end <= range.bus_start || existing.bus_start >= range.bus_end {
+                    reinserts.push(existing);
+                    continue;
+                }
+
+                if existing.priority >= range.priority {
+                    reinserts.push(existing);
+                    for segment in reinserts {
+                        self.map.insert(segment.bus_start, segment);
+                    }
+                    return Err(BusError::Overlap {
+                        address: range.bus_start,
+                        details: "higher priority mapping already present".into(),
+                    });
+                }
+
+                if existing.bus_start < range.bus_start {
+                    reinserts.push(self.slice_range(
+                        &existing,
+                        existing.bus_start,
+                        range.bus_start,
+                    ));
+                }
+
+                if existing.bus_end > range.bus_end {
+                    reinserts.push(self.slice_range(&existing, range.bus_end, existing.bus_end));
                 }
             }
         }
-        Ok(true)
+
+        for segment in reinserts {
+            self.map.insert(segment.bus_start, segment);
+        }
+
+        Ok(())
     }
 
-    pub fn register_device(&self, device: Arc<dyn Device>, base_address: usize) -> BusResult<()> {
-        let span = device.span();
-        if span.start != 0 || span.end <= span.start {
-            return Err(BusError::InvalidDeviceSpan {
-                device: device.name().to_string(),
-            });
-        }
-        let size = span.end - span.start;
-        let end = base_address.checked_add(size).ok_or(BusError::Overlap {
-            address: base_address,
-            details: "range exceeds address space".into(),
-        })?;
-
-        let name = device.name().to_string();
-        {
-            let names = self.name_index.read().unwrap();
-            if names.contains_key(&name) {
-                return Err(BusError::Overlap {
-                    address: base_address,
-                    details: format!("device '{name}' already registered"),
-                });
+    fn collect_overlap_keys(&self, start: usize, end: usize) -> Vec<usize> {
+        let mut keys = Vec::new();
+        if let Some((&key, range)) = self.map.range(..=start).next_back() {
+            if range.bus_end > start {
+                keys.push(key);
             }
         }
-
-        let mut devices = self.devices.write().unwrap();
-        let mut names = self.name_index.write().unwrap();
-        let device_id = devices.len();
-        devices.push(device);
-        names.insert(name, device_id);
-
-        self.add_range(
-            base_address,
-            end,
-            device_id,
-            0,
-            DEVICE_PRIORITY,
-            RangeKind::Device,
-        )?;
-        Ok(())
-    }
-
-    pub fn redirect(&self, source_start: usize, size: usize, target_start: usize) -> BusResult<()> {
-        if size == 0 {
-            return Err(BusError::RedirectInvalid {
-                source: source_start,
-                size,
-                target: target_start,
-                reason: "size must be greater than zero",
-            });
+        for (&key, _) in self.map.range(start..end) {
+            keys.push(key);
         }
-
-        let resolved = self.resolve(target_start)?;
-        let target_end = target_start
-            .checked_add(size)
-            .ok_or(BusError::RedirectInvalid {
-                source: source_start,
-                size,
-                target: target_start,
-                reason: "target address overflow",
-            })?;
-
-        if target_end > resolved.bus_end {
-            return Err(BusError::RedirectInvalid {
-                source: source_start,
-                size,
-                target: target_start,
-                reason: "target range crosses device boundary",
-            });
-        }
-
-        let source_end = source_start
-            .checked_add(size)
-            .ok_or(BusError::RedirectInvalid {
-                source: source_start,
-                size,
-                target: target_start,
-                reason: "source address overflow",
-            })?;
-        let device_offset = resolved.device_offset + (target_start - resolved.bus_start);
-        let range_id = self.add_range(
-            source_start,
-            source_end,
-            resolved.device_id,
-            device_offset,
-            REDIRECT_PRIORITY,
-            RangeKind::Redirect,
-        )?;
-        self.redirect_index
-            .write()
-            .unwrap()
-            .insert((source_start, size), range_id);
-        Ok(())
+        keys.sort_unstable();
+        keys.dedup();
+        keys
     }
 
-    pub fn remove_redirect(&self, source_start: usize, size: usize) -> BusResult<bool> {
-        let range_id = match self
-            .redirect_index
-            .write()
-            .unwrap()
-            .remove(&(source_start, size))
-        {
-            Some(id) => id,
-            None => return Ok(false),
-        };
-        self.remove_range(range_id)
-    }
-
-    pub fn resolve(&self, address: usize) -> BusResult<ResolvedRange> {
-        let bucket_idx = self.bucket_index(address);
-        let segment = {
-            let buckets = self.buckets.read().unwrap();
-            buckets.get(&bucket_idx).and_then(|segments| {
-                segments
-                    .iter()
-                    .find(|segment| segment.contains(address))
-                    .cloned()
-            })
-        };
-
-        let segment = segment.ok_or(BusError::NotMapped { address })?;
-        let devices = self.devices.read().unwrap();
-        let device = devices
-            .get(segment.device_id)
-            .cloned()
-            .ok_or(BusError::NotMapped { address })?;
-
-        Ok(ResolvedRange {
-            device,
-            bus_start: segment.bus_start,
-            bus_end: segment.bus_end,
-            device_offset: segment.device_offset,
-            priority: segment.priority,
-            device_id: segment.device_id,
-        })
-    }
-
-    pub fn bytes_to_end(&self, address: usize) -> BusResult<usize> {
-        let resolved = self.resolve(address)?;
-        Ok(resolved.bus_end - address)
+    fn slice_range(&mut self, source: &BusRange, start: usize, end: usize) -> BusRange {
+        let mut segment = source.clone();
+        segment.bus_start = start;
+        segment.bus_end = end;
+        segment.device_offset = source.device_offset + (start - source.bus_start);
+        segment
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{RamMemory, Endianness};
+    use crate::soc::device::{AccessContext, DeviceError, DeviceResult, Endianness};
+    use std::ops::Range;
 
-    fn make_memory(name: &str, size: usize) -> Arc<RamMemory> {
-        Arc::new(RamMemory::new(name.to_string(), size, Endianness::Little))
+    struct ProbeDevice {
+        name: String,
+        backing: Vec<u8>,
+    }
+
+    impl ProbeDevice {
+        fn new(name: &str, len: usize) -> Self {
+            Self::with_fill(name, len, 0)
+        }
+
+        fn with_fill(name: &str, len: usize, fill: u8) -> Self {
+            Self {
+                name: name.to_string(),
+                backing: vec![fill; len],
+            }
+        }
+    }
+
+    impl Device for ProbeDevice {
+        fn name(&self) -> &str {
+            &self.name
+        }
+
+        fn span(&self) -> Range<usize> {
+            0..self.backing.len()
+        }
+
+        fn endianness(&self) -> Endianness {
+            Endianness::Little
+        }
+
+        fn read(&mut self, offset: usize, out: &mut [u8], _ctx: AccessContext) -> DeviceResult<()> {
+            let end = offset + out.len();
+            if end > self.backing.len() {
+                return Err(DeviceError::OutOfRange {
+                    offset,
+                    len: out.len(),
+                    capacity: self.backing.len(),
+                });
+            }
+            out.copy_from_slice(&self.backing[offset..end]);
+            Ok(())
+        }
+
+        fn write(&mut self, offset: usize, data: &[u8], _ctx: AccessContext) -> DeviceResult<()> {
+            let end = offset + data.len();
+            if end > self.backing.len() {
+                return Err(DeviceError::OutOfRange {
+                    offset,
+                    len: data.len(),
+                    capacity: self.backing.len(),
+                });
+            }
+            self.backing[offset..end].copy_from_slice(data);
+            Ok(())
+        }
+    }
+
+    fn read_byte(bus: &DeviceBus, address: usize) -> u8 {
+        let mut handle = bus
+            .resolve(address)
+            .unwrap_or_else(|_| panic!("address 0x{address:X} should resolve"));
+        let mut byte = [0u8; 1];
+        handle
+            .read(&mut byte, AccessContext::CPU)
+            .expect("read byte");
+        byte[0]
+    }
+
+    fn write_bytes(bus: &mut DeviceBus, address: usize, data: &[u8]) {
+        let mut handle = bus
+            .resolve(address)
+            .unwrap_or_else(|_| panic!("address 0x{address:X} should resolve"));
+        handle.write(data, AccessContext::CPU).expect("write bytes");
     }
 
     #[test]
     fn register_device_and_resolve_returns_expected_mapping() {
-        let bus = DeviceBus::new(10);
-        let ram = make_memory("ram", 0x2000);
-        bus.register_device(ram.clone(), 0x4000)
-            .expect("register ram");
+        let mut bus = DeviceBus::new();
+        let probe = ProbeDevice::new("probe", 0x2000);
+        bus.map_device(probe, 0x4000, DEVICE_PRIORITY)
+            .expect("register device");
 
-        let resolved = bus.resolve(0x5000).expect("resolve mapped address");
+        let mut handle = bus.resolve(0x5000).expect("resolve mapped address");
+        let pattern = [0xAA, 0xBB, 0xCC, 0xDD];
+        handle
+            .write(&pattern, AccessContext::CPU)
+            .expect("write via bus handle");
+
+        let mut verifier = bus.resolve(0x5000).expect("resolve for verification");
+        let mut buf = [0u8; 4];
+        verifier
+            .read(&mut buf, AccessContext::CPU)
+            .expect("round-trip read");
         assert_eq!(
-            resolved.bus_start, 0x4000,
-            "resolved range should start at the device base address"
-        );
-        assert_eq!(
-            resolved.device_offset + (0x5000 - resolved.bus_start),
-            0x1000,
-            "device offset reflects distance from base"
-        );
-        assert_eq!(
-            resolved.device.name(),
-            "ram",
-            "resolve should return the same device that was registered"
+            buf, pattern,
+            "bus read should see same bytes at alias offset"
         );
     }
 
     #[test]
-    fn redirect_creates_alias_without_copying_data() {
-        let bus = DeviceBus::new(8);
-        let rom = make_memory("rom", 0x1000);
-        let preload = [0xAA, 0xBB, 0xCC, 0xDD];
-        rom.write(0x40, &preload).expect("prefill rom");
-        bus.register_device(rom.clone(), 0).unwrap();
+    fn redirect_range_aliases_target_bytes() {
+        let mut bus = DeviceBus::new();
+        let probe = ProbeDevice::new("probe", 0x3000);
+        bus.map_device(probe, 0x4000, DEVICE_PRIORITY)
+            .expect("register device");
 
-        bus.redirect(0x2000, 4, 0x40).expect("create alias");
-        let resolved_alias = bus.resolve(0x2002).expect("resolve alias address");
+        write_bytes(&mut bus, 0x4100, &[0xFE, 0xED]);
+        bus.map_range(0x2000, 0x20, 0x4100, REDIRECT_PRIORITY)
+            .expect("map redirect");
 
         let mut buf = [0u8; 2];
-        let alias_offset = resolved_alias.device_offset + (0x2002 - resolved_alias.bus_start);
-        resolved_alias
-            .device
-            .read(alias_offset, &mut buf)
-            .expect("read redirected bytes");
+        let mut alias = bus.resolve(0x2000).expect("resolve alias");
+        alias
+            .read(&mut buf, AccessContext::CPU)
+            .expect("read alias");
+        assert_eq!(buf, [0xFE, 0xED], "alias should mirror source bytes");
+
+        let mut alias_writer = bus.resolve(0x2000).expect("resolve alias for write");
+        alias_writer
+            .write(&[0xAA, 0x55], AccessContext::CPU)
+            .expect("write via redirect range");
+
+        let mut verify = [0u8; 2];
+        let mut source = bus.resolve(0x4100).expect("resolve source");
+        source
+            .read(&mut verify, AccessContext::CPU)
+            .expect("read source");
+        assert_eq!(verify, [0xAA, 0x55], "redirect writes should hit target");
+    }
+
+    #[test]
+    fn lower_priority_blocked_until_higher_removed() {
+        let mut bus = DeviceBus::new();
+        let high = ProbeDevice::with_fill("hi", 0x100, 0xAA);
+        bus.map_device(high, 0x8000, DEVICE_PRIORITY + 5)
+            .expect("register high priority device");
+
+        let low_attempt = ProbeDevice::with_fill("lo", 0x100, 0x33);
+        let err = bus.map_device(low_attempt, 0x8000, DEVICE_PRIORITY);
+        assert!(
+            matches!(err, Err(BusError::Overlap { .. })),
+            "lower priority should be rejected"
+        );
+
+        bus.unmap(0x8000).expect("remove higher priority range");
+
+        let low = ProbeDevice::with_fill("lo", 0x100, 0x33);
+        bus.map_device(low, 0x8000, DEVICE_PRIORITY)
+            .expect("register low priority after removal");
+
         assert_eq!(
-            buf,
-            [0xCC, 0xDD],
-            "redirect access returns bytes from the target region"
+            read_byte(&bus, 0x8000),
+            0x33,
+            "after removal, low priority device should back the range"
         );
     }
 
     #[test]
-    fn bytes_to_end_tracks_remaining_range_length() {
-        let bus = DeviceBus::new(12);
-        let ram = make_memory("ram", 0x3000);
-        bus.register_device(ram, 0x1000).unwrap();
-        let remaining = bus.bytes_to_end(0x1ABC).expect("compute remaining");
+    fn higher_priority_creates_hole_in_lower_range() {
+        let mut bus = DeviceBus::new();
+        let low = ProbeDevice::with_fill("low", 0x200, 0x11);
+        bus.map_device(low, 0x2000, DEVICE_PRIORITY)
+            .expect("register low priority range");
+
+        assert_eq!(read_byte(&bus, 0x2050), 0x11, "baseline low range");
+
+        let high = ProbeDevice::with_fill("high", 0x40, 0xEE);
+        bus.map_device(high, 0x2060, DEVICE_PRIORITY + 10)
+            .expect("register high priority slice");
+
         assert_eq!(
-            remaining,
-            0x1000 + 0x3000 - 0x1ABC,
-            "bytes_to_end should subtract the queried address from range end"
+            read_byte(&bus, 0x205F),
+            0x11,
+            "address before hole still hits low device"
+        );
+        assert_eq!(
+            read_byte(&bus, 0x2065),
+            0xEE,
+            "hole address resolves to high priority device"
+        );
+        assert_eq!(
+            read_byte(&bus, 0x2090),
+            0x11,
+            "address after hole maps back to low device"
         );
     }
 }

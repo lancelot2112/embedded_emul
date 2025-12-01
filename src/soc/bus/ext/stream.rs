@@ -1,8 +1,7 @@
 //! Stream-style adapters and byte-chunk helpers layered on top of `DataHandle`.
-use std::io::{self, Read, Write};
+use crate::soc::bus::{BusError, BusResult, DataTxn};
 use crate::soc::device::endianness::MAX_ENDIAN_BYTES;
-use crate::soc::bus::{BusError, BusResult, DataHandle};
-
+use std::io::{self, Read, Write};
 
 /// Byte convenience helpers so callers can read/write large buffers without
 /// replicating the MAX_ENDIAN_BYTES chunking logic every time.
@@ -11,14 +10,15 @@ pub trait ByteDataHandleExt {
     fn stream_in(&mut self, data: &[u8]) -> BusResult<()>;
 }
 
-impl ByteDataHandleExt for DataHandle {
+impl ByteDataHandleExt for DataTxn {
     fn stream_out(&mut self, out: &mut [u8]) -> BusResult<()> {
         if out.is_empty() {
             return Ok(());
         }
-        self.address_mut().transact(out.len(), |device, offset, _resolved| {
-            device.read(offset, out).into()
-        })?;
+        self.address_mut()
+            .transact(out.len(), |device, offset, _resolved| {
+                device.read(offset, out).into()
+            })?;
         Ok(())
     }
 
@@ -26,20 +26,21 @@ impl ByteDataHandleExt for DataHandle {
         if data.is_empty() {
             return Ok(());
         }
-        self.address_mut().transact(data.len(), |device, offset, _resolved| {
-            device.write(offset, data).into()
-        })?;
+        self.address_mut()
+            .transact(data.len(), |device, offset, _resolved| {
+                device.write(offset, data).into()
+            })?;
         Ok(())
     }
 }
 
 /// Lightweight view that exposes buffered style helpers over a mutable [`DataHandle`].
 pub struct DataStream<'a> {
-    handle: &'a mut DataHandle,
+    handle: &'a mut DataTxn,
 }
 
 impl<'a> DataStream<'a> {
-    pub fn new(handle: &'a mut DataHandle) -> Self {
+    pub fn new(handle: &'a mut DataTxn) -> Self {
         Self { handle }
     }
 
@@ -58,7 +59,7 @@ impl<'a> DataStream<'a> {
     }
 }
 
-impl Read for DataHandle {
+impl Read for DataTxn {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
@@ -73,7 +74,7 @@ impl Read for DataHandle {
     }
 }
 
-impl Write for DataHandle {
+impl Write for DataTxn {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0);
@@ -99,15 +100,15 @@ fn io_error(err: BusError) -> io::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{RamMemory, Device, Endianness};
     use crate::soc::bus::DeviceBus;
+    use crate::soc::device::{Device, Endianness, RamMemory};
     use std::sync::Arc;
 
-    fn make_handle() -> (DataHandle, Arc<RamMemory>) {
+    fn make_handle() -> (DataTxn, Arc<RamMemory>) {
         let bus = Arc::new(DeviceBus::new(8));
         let memory = Arc::new(RamMemory::new("ram", 0x40, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
-        let mut handle = DataHandle::new(bus);
+        let mut handle = DataTxn::new(bus);
         handle.address_mut().jump(0).unwrap();
         (handle, memory)
     }

@@ -67,9 +67,7 @@ fn executes_powerpc_add() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    harness
-        .write("reg::r3", 0x7FFF_FFFF)
-        .expect("seed r3");
+    harness.write("reg::r3", 0x7FFF_FFFF).expect("seed r3");
     harness.write("reg::r4", 1).expect("seed r4");
 
     let rom = assemble_block(harness.machine(), &["add r5, r3, r4"]);
@@ -92,9 +90,7 @@ fn executes_powerpc_add_record_sets_cr0() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    harness
-        .write("reg::r3", 0x7FFF_FFFF)
-        .expect("seed r3");
+    harness.write("reg::r3", 0x7FFF_FFFF).expect("seed r3");
     harness.write("reg::r4", 1).expect("seed r4");
 
     let rom = assemble_block(harness.machine(), &["add r5, r3, r4", "add. r6, r5, r4"]);
@@ -104,40 +100,32 @@ fn executes_powerpc_add_record_sets_cr0() {
     assert_eq!(executions.len(), 2);
     assert_eq!(executions[1].mnemonic, "add.");
 
-    let r6 = harness
-        .read("reg::r6")
-        .expect("read r6");
+    let r6 = harness.read("reg::r6").expect("read r6");
     assert_eq!(r6 as u32, 0x8000_0001);
 
     let (neg, pos, zero, raw) = get_cr0(&mut harness);
     let exp_neg = true;
-    assert_eq!(neg, exp_neg,
+    assert_eq!(
+        neg, exp_neg,
         "CR0::NEG should be {exp_neg}, got {neg} (raw=0x{raw:X})"
     );
     let exp_pos = false;
-    assert_eq!(pos, exp_pos,
+    assert_eq!(
+        pos, exp_pos,
         "CR0::POS should be {exp_pos}, got {pos} (raw=0x{raw:X})"
     );
     let exp_zero = false;
-    assert_eq!(zero, exp_zero,
+    assert_eq!(
+        zero, exp_zero,
         "CR0::ZERO should be {exp_zero}, got {zero} (raw=0x{raw:X})"
     );
 }
 
-fn get_cr0(
-    harness: &mut ExecutionHarness<SoftwareHost>,
-) -> (bool, bool, bool, u64) {
-    let raw = harness.read("reg::CR0")
-        .expect("CR0 raw");
-    let neg = harness
-        .read("reg::CR0::NEG")
-        .expect("CR0::NEG") == 1;
-    let pos = harness
-        .read("reg::CR0::POS")
-        .expect("CR0::POS") == 1;
-    let zero = harness
-        .read("reg::CR0::ZERO")
-        .expect("CR0::ZERO") == 1;
+fn get_cr0(harness: &mut ExecutionHarness<SoftwareHost>) -> (bool, bool, bool, u64) {
+    let raw = harness.read("reg::CR0").expect("CR0 raw");
+    let neg = harness.read("reg::CR0::NEG").expect("CR0::NEG") == 1;
+    let pos = harness.read("reg::CR0::POS").expect("CR0::POS") == 1;
+    let zero = harness.read("reg::CR0::ZERO").expect("CR0::ZERO") == 1;
     (neg, pos, zero, raw)
 }
 
@@ -147,9 +135,7 @@ fn executes_powerpc_add_with_overflow() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    harness
-        .write("reg::r3", 0xFFFF_FFFF)
-        .expect("seed r3");
+    harness.write("reg::r3", 0xFFFF_FFFF).expect("seed r3");
     harness.write("reg::r4", 1).expect("seed r4");
     harness.write("reg::XER", 0).expect("clear XER");
 
@@ -172,9 +158,7 @@ fn executes_powerpc_add_with_overflow_and_record() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("defs/powerpc");
     let coredef = root.join("e200.coredef");
     let mut harness = build_powerpc_harness(&coredef);
-    harness
-        .write("reg::r3", 0xFFFF_FFFF)
-        .expect("seed r3");
+    harness.write("reg::r3", 0xFFFF_FFFF).expect("seed r3");
     harness.write("reg::r4", 1).expect("seed r4");
     harness.write("reg::XER", 0).expect("clear XER");
 
@@ -191,15 +175,18 @@ fn executes_powerpc_add_with_overflow_and_record() {
     check_summary_overflow(&mut harness, true, true, true);
     let (neg, pos, zero, raw) = get_cr0(&mut harness);
     let exp_neg = false;
-    assert_eq!(neg, exp_neg,
+    assert_eq!(
+        neg, exp_neg,
         "CR0::NEG should be {exp_neg}, got {neg} (raw=0x{raw:X})"
     );
     let exp_pos = false;
-    assert_eq!(pos, exp_pos,
+    assert_eq!(
+        pos, exp_pos,
         "CR0::POS should be {exp_pos}, got {pos} (raw=0x{raw:X})"
     );
     let exp_zero = true;
-    assert_eq!(zero, exp_zero,
+    assert_eq!(
+        zero, exp_zero,
         "CR0::ZERO should be {exp_zero}, got {zero} (raw=0x{raw:X})"
     );
 }

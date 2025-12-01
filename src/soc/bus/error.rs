@@ -1,6 +1,10 @@
-use std::{error::Error, fmt};
+use std::{
+    error::Error,
+    fmt,
+    sync::{MutexGuard, PoisonError},
+};
 
-use crate::soc::device::DeviceError;
+use crate::soc::device::{Device, DeviceError};
 
 pub type BusResult<T> = Result<T, BusError>;
 
@@ -23,14 +27,22 @@ pub enum BusError {
         device: String,
         source: Box<dyn Error + Send + Sync>,
     },
+    HandleOutOfRange {
+        offset: usize,
+        delta: isize,
+    },
     OutOfRange {
         address: usize,
         end: usize,
+    },
+    InvalidAddress {
+        address: usize,
     },
     InvalidDeviceSpan {
         device: String,
     },
     HandleNotPositioned,
+    LockPoisoned,
 }
 
 impl fmt::Display for BusError {
@@ -54,6 +66,10 @@ impl fmt::Display for BusError {
                 )
             }
             BusError::DeviceFault { device, .. } => write!(f, "device '{device}' reported a fault"),
+            BusError::HandleOutOfRange { offset, delta } => write!(
+                f,
+                "access at offset 0x{offset:016X} + {delta} out of device range"
+            ),
             BusError::OutOfRange { address, end } => write!(
                 f,
                 "address 0x{address:016X} exceeds mapping end 0x{end:016X}"
@@ -61,10 +77,25 @@ impl fmt::Display for BusError {
             BusError::InvalidDeviceSpan { device } => {
                 write!(f, "device '{device}' reported an invalid span")
             }
+            BusError::InvalidAddress { address } => {
+                write!(
+                    f,
+                    "address 0x{address:016X} is invalid for the target device"
+                )
+            }
             BusError::HandleNotPositioned => {
                 write!(f, "address handle has not been positioned with jump()")
             }
+            BusError::LockPoisoned => {
+                write!(f, "bus lock has been poisoned due to a prior error")
+            }
         }
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, dyn Device + 'static>>> for BusError {
+    fn from(_value: PoisonError<MutexGuard<'_, dyn Device + 'static>>) -> Self {
+        BusError::LockPoisoned
     }
 }
 

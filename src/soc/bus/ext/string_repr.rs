@@ -1,13 +1,13 @@
 //! Helpers for building printable representations from bus data.
 
-use crate::soc::bus::{BusResult, DataHandle, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{BusResult, DataTxn, ext::stream::ByteDataHandleExt};
 
 pub trait StringReprDataHandleExt {
     fn read_hex(&mut self, length: usize) -> BusResult<String>;
     fn read_ascii(&mut self, length: usize) -> BusResult<String>;
 }
 
-impl StringReprDataHandleExt for DataHandle {
+impl StringReprDataHandleExt for DataTxn {
     fn read_hex(&mut self, length: usize) -> BusResult<String> {
         let mut buf = vec![0u8; length];
         self.stream_out(&mut buf)?;
@@ -27,16 +27,16 @@ impl StringReprDataHandleExt for DataHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{RamMemory, Device, Endianness};
     use crate::soc::bus::DeviceBus;
+    use crate::soc::device::{Device, Endianness, RamMemory};
     use std::sync::Arc;
 
-    fn make_handle(bytes: &[u8]) -> DataHandle {
+    fn make_handle(bytes: &[u8]) -> DataTxn {
         let bus = Arc::new(DeviceBus::new(8));
         let memory = Arc::new(RamMemory::new("rom", 0x20, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
         memory.write(0, bytes).unwrap();
-        let mut handle = DataHandle::new(bus);
+        let mut handle = DataTxn::new(bus);
         handle.address_mut().jump(0).unwrap();
         handle
     }

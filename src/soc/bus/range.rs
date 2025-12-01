@@ -10,7 +10,6 @@ pub enum RangeKind {
 
 #[derive(Debug, Clone)]
 pub struct BusRange {
-    pub id: usize,
     pub bus_start: usize,
     pub bus_end: usize,
     pub device_offset: usize,

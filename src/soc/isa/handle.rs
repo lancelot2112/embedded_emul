@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::soc::bus::{DataHandle, ext::stream::ByteDataHandleExt};
+use crate::soc::bus::{DataTxn, ext::stream::ByteDataHandleExt};
 
 use super::error::IsaError;
 use super::machine::{Disassembly, MachineDescription};
@@ -23,7 +23,7 @@ impl IsaHandle {
     /// Disassembles len bytes starting at the current address exposed by the `DataHandle`.
     pub fn disassemble_range(
         &self,
-        data: &mut DataHandle,
+        data: &mut DataTxn,
         len: usize,
     ) -> Result<Vec<Disassembly>, IsaError> {
         let mut buf = vec![0u8; len];

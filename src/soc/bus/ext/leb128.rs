@@ -44,8 +44,8 @@ impl Leb128DataHandleExt for ScalarHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{RamMemory, Device, Endianness};
     use crate::soc::bus::DeviceBus;
+    use crate::soc::device::{Device, Endianness, RamMemory};
     use std::sync::Arc;
 
     fn make_handle(bytes: &[u8]) -> DataHandle {

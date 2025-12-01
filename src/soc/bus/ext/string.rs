@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::soc::bus::{
-    BusResult, DataHandle,
+    BusResult, DataTxn,
     ext::{int::IntDataHandleExt, stream::ByteDataHandleExt},
 };
 
@@ -15,7 +15,7 @@ pub trait StringDataHandleExt {
     fn read_c_string(&mut self, max_len: usize) -> BusResult<String>;
 }
 
-impl StringDataHandleExt for DataHandle {
+impl StringDataHandleExt for DataTxn {
     fn read_utf8(&mut self, len: usize) -> BusResult<String> {
         let mut buf = vec![0u8; len];
         self.stream_out(&mut buf)?;
@@ -51,16 +51,16 @@ fn trim_nul(data: Cow<'_, [u8]>) -> Cow<'_, str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::device::{RamMemory, Device, Endianness};
     use crate::soc::bus::DeviceBus;
+    use crate::soc::device::{Device, Endianness, RamMemory};
     use std::sync::Arc;
 
-    fn prepare_handle(bytes: &[u8]) -> DataHandle {
+    fn prepare_handle(bytes: &[u8]) -> DataTxn {
         let bus = Arc::new(DeviceBus::new(8));
         let memory = Arc::new(RamMemory::new("rom", 0x40, Endianness::Little));
         bus.register_device(memory.clone(), 0).unwrap();
         memory.write(0, bytes).unwrap();
-        let mut handle = DataHandle::new(bus);
+        let mut handle = DataTxn::new(bus);
         handle.address_mut().jump(0).unwrap();
         handle
     }

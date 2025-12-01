@@ -50,12 +50,22 @@ impl<'arena> TypeBuilder<'arena> {
         self.arena.push_record(TypeRecord::Pointer(pointer))
     }
 
-    pub fn sequence(&mut self, element: TypeId, stride_bytes: usize, count: SequenceCount) -> TypeId {
+    pub fn sequence(
+        &mut self,
+        element: TypeId,
+        stride_bytes: usize,
+        count: SequenceCount,
+    ) -> TypeId {
         let sequence = SequenceType::new(element, stride_bytes, count);
         self.arena.push_record(TypeRecord::Sequence(sequence))
     }
 
-    pub fn sequence_static(&mut self, element: TypeId, stride_bytes: usize, count: usize) -> TypeId {
+    pub fn sequence_static(
+        &mut self,
+        element: TypeId,
+        stride_bytes: usize,
+        count: usize,
+    ) -> TypeId {
         self.sequence(element, stride_bytes, SequenceCount::Static(count))
     }
 
