@@ -23,6 +23,9 @@ pub enum BusError {
         target: usize,
         reason: &'static str,
     },
+    PageFault {
+        details: String,
+    },
     DeviceFault {
         device: String,
         source: Box<dyn Error + Send + Sync>,
@@ -66,6 +69,7 @@ impl fmt::Display for BusError {
                 )
             }
             BusError::DeviceFault { device, .. } => write!(f, "device '{device}' reported a fault"),
+            BusError::PageFault { details } => write!(f, "page fault: {details}"),
             BusError::HandleOutOfRange { offset, delta } => write!(
                 f,
                 "access at offset 0x{offset:016X} + {delta} out of device range"

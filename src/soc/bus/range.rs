@@ -2,12 +2,6 @@ use std::sync::Arc;
 
 use crate::soc::device::Device;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RangeKind {
-    Device,
-    Redirect,
-}
-
 #[derive(Debug, Clone)]
 pub struct BusRange {
     pub bus_start: usize,
@@ -15,7 +9,6 @@ pub struct BusRange {
     pub device_offset: usize,
     pub device_id: usize,
     pub priority: u8,
-    pub kind: RangeKind,
 }
 
 impl BusRange {

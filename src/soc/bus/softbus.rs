@@ -1,5 +1,5 @@
-//! DeviceBus owns the SoC memory map, handling device registration, hashed lookups,
-//! and redirect overlays so consumers get deterministic address-to-device resolution
+//! DeviceBus owns the SoC physical memory map, handling device registration, hashed lookups,
+//! and prioritised overlays so consumers get deterministic address-to-device resolution
 //! without mutating shared state. It mirrors the .NET BasicHashedDeviceBus logic while
 //! providing Rust-friendly error handling and concurrency semantics.
 use std::{
@@ -11,11 +11,10 @@ use crate::soc::{bus::DeviceHandle, device::Device};
 
 use super::{
     error::{BusError, BusResult},
-    range::{BusRange, RangeKind},
+    range::BusRange,
 };
 
 const DEVICE_PRIORITY: u8 = 0;
-const REDIRECT_PRIORITY: u8 = 10;
 
 pub type DeviceRef = Arc<Mutex<dyn Device>>;
 
@@ -53,67 +52,6 @@ impl DeviceBus {
             device_offset: device_range.start,
             device_id,
             priority,
-            kind: super::range::RangeKind::Device,
-        };
-        self.insert_range(range)
-    }
-
-    pub fn map_range(
-        &mut self,
-        start: usize,
-        len: usize,
-        redirect: usize,
-        priority: u8,
-    ) -> BusResult<()> {
-        if len == 0 {
-            return Err(BusError::RedirectInvalid {
-                source: start,
-                size: len,
-                target: redirect,
-                reason: "zero-length range",
-            });
-        }
-
-        let source_end = start.checked_add(len).ok_or(BusError::RedirectInvalid {
-            source: start,
-            size: len,
-            target: redirect,
-            reason: "source range overflow",
-        })?;
-
-        let target_end = redirect.checked_add(len).ok_or(BusError::RedirectInvalid {
-            source: start,
-            size: len,
-            target: redirect,
-            reason: "target range overflow",
-        })?;
-
-        let target_range = self
-            .range_for_address(redirect)
-            .ok_or(BusError::RedirectInvalid {
-                source: start,
-                size: len,
-                target: redirect,
-                reason: "redirect target is unmapped",
-            })?;
-
-        if target_end > target_range.bus_end {
-            return Err(BusError::RedirectInvalid {
-                source: start,
-                size: len,
-                target: redirect,
-                reason: "redirect spans multiple ranges",
-            });
-        }
-
-        let device_offset = target_range.device_offset + (redirect - target_range.bus_start);
-        let range = BusRange {
-            bus_start: start,
-            bus_end: source_end,
-            device_offset,
-            device_id: target_range.device_id,
-            priority,
-            kind: RangeKind::Redirect,
         };
         self.insert_range(range)
     }
@@ -134,6 +72,17 @@ impl DeviceBus {
             .ok_or(BusError::NotMapped { address })?;
         self.map.remove(&key);
         Ok(())
+    }
+
+    /// Returns the physical device reference and cloned range that contains `address`.
+    /// Callers that need to construct custom views (TLBs, MMUs, etc) can reuse this to
+    /// validate that a downstream redirect stays within a single device span.
+    pub fn resolve_device_at(&self, address: usize) -> BusResult<(DeviceRef, BusRange)> {
+        let range = self
+            .range_for_address(address)
+            .cloned()
+            .ok_or(BusError::InvalidAddress { address })?;
+        Ok((self.devices[range.device_id].clone(), range))
     }
 }
 
