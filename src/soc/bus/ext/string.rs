@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use crate::soc::bus::{
-    BusResult, CursorBehavior, DataView 
+    BusResult, DataView 
 };
 
 pub trait StringDataViewExt {

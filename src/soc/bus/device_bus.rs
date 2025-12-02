@@ -26,7 +26,6 @@ pub struct DeviceBus {
     // Mapping physical address ranges to Device IDs
     // Key: Start Address -> (End Address, DeviceId, RemapOffset)
     map: BTreeMap<usize, BusRange>,
-    next_range_id: usize,
 }
 
 impl DeviceBus {
@@ -34,7 +33,6 @@ impl DeviceBus {
         Self {
             devices: Vec::new(),
             map: BTreeMap::new(),
-            next_range_id: 0,
         }
     }
 
@@ -242,7 +240,7 @@ impl DeviceBus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::{bus::StaticCursor, device::{AccessContext, DeviceError, DeviceResult, Endianness}};
+    use crate::soc::device::{AccessContext, DeviceResult, Endianness};
     use std::ops::Range;
 
     struct ProbeDevice {

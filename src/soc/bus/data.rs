@@ -21,6 +21,11 @@ impl DataView {
     }
 
     #[inline(always)]
+    pub fn peek(&mut self, out: &mut [u8]) -> BusResult<()> {
+        self.handle.peek(out)
+    }
+
+    #[inline(always)]
     pub fn read(&mut self, out: &mut [u8]) -> BusResult<()> {
         self.handle.read(out, self.context)
     }
@@ -30,37 +35,73 @@ impl DataView {
         self.handle.write(data, self.context)
     }
 
+    pub fn peek_u8(&mut self) -> BusResult<u8> {
+        let mut buf = [0u8; 1];
+        self.peek(&mut buf)?;
+        Ok(buf[0])
+    }
+
     pub fn read_u8(&mut self) -> BusResult<u8> {
         let mut buf = [0u8; 1];
-        let _ = self.read(&mut buf)?;
+        self.read(&mut buf)?;
         Ok(buf[0])
+    }
+
+    fn u16_from_bytes(&self, buf: [u8; 2]) -> u16 {
+        match self.handle.get_endianness() {
+            Endianness::Big => u16::from_be_bytes(buf),
+            Endianness::Little => u16::from_le_bytes(buf),
+        }
+    }
+
+    fn u32_from_bytes(&self, buf: [u8; 4]) -> u32 {
+        match self.handle.get_endianness() {
+            Endianness::Big => u32::from_be_bytes(buf),
+            Endianness::Little => u32::from_le_bytes(buf),
+        }
+    }
+
+    fn u64_from_bytes(&self, buf: [u8; 8]) -> u64 {
+        match self.handle.get_endianness() {
+            Endianness::Big => u64::from_be_bytes(buf),
+            Endianness::Little => u64::from_le_bytes(buf),
+        }
+    }
+
+    pub fn peek_u16(&mut self) -> BusResult<u16> {
+        let mut buf = [0u8; 2];
+        self.peek(&mut buf)?;
+        Ok(self.u16_from_bytes(buf))
+    }
+
+    pub fn peek_u32(&mut self) -> BusResult<u32> {
+        let mut buf = [0u8; 4];
+        self.peek(&mut buf)?;
+        Ok(self.u32_from_bytes(buf))
+    }
+
+    pub fn peek_u64(&mut self) -> BusResult<u64> {
+        let mut buf = [0u8; 8];
+        self.peek(&mut buf)?;
+        Ok(self.u64_from_bytes(buf))
     }
 
     pub fn read_u16(&mut self) -> BusResult<u16> {
         let mut buf = [0u8; 2];
         self.read(&mut buf)?;
-        match self.handle.get_endianness() {
-            Endianness::Big => Ok(u16::from_be_bytes(buf)),
-            Endianness::Little => Ok(u16::from_le_bytes(buf)),
-        }
+        Ok(self.u16_from_bytes(buf))
     }
 
     pub fn read_u32(&mut self) -> BusResult<u32> {
         let mut buf = [0u8; 4];
         self.read(&mut buf)?;
-        match self.handle.get_endianness() {
-            Endianness::Big => Ok(u32::from_be_bytes(buf)),
-            Endianness::Little => Ok(u32::from_le_bytes(buf)),
-        }
+        Ok(self.u32_from_bytes(buf))
     }
 
     pub fn read_u64(&mut self) -> BusResult<u64> {
         let mut buf = [0u8; 8];
         self.read(&mut buf)?;
-        match self.handle.get_endianness() {
-            Endianness::Big => Ok(u64::from_be_bytes(buf)),
-            Endianness::Little => Ok(u64::from_le_bytes(buf)),
-        }
+        Ok(self.u64_from_bytes(buf))
     }
 
     pub fn write_u8(&mut self, value: u8) -> BusResult<()> {
@@ -108,70 +149,33 @@ mod tests {
 
     #[test]
     fn read_write_round_trip() {
-        let bus = DeviceBus::new();
+        let mut bus = DeviceBus::new();
         let memory = RamMemory::new("ram", 0x1000, Endianness::Little);
         bus.map_device(memory, 0x1000, 0).unwrap();
 
         let be_memory = RamMemory::new("be_ram", 0x1000, Endianness::Big);
         bus.map_device(be_memory, 0x2000, 0).unwrap();
 
-        let mut handle = bus.resolve(0x1000).expect("valid address");
-        let mut cursor = DataView::new(handle, AccessContext::CPU);
-        cursor.write_u32(0xDEADBEEF).expect("write succeeds");
-        assert_eq!(cursor.get_handle().get_position(), 4, "cursor should advance");
-
-        let mut handle = bus.resolve(0x1000).expect("valid address");
-
-        {
-            let mut scalar = cursor.scalar_handle(4).expect("pin is valid");
-            scalar.write(0xDEADBEEF).expect("write succeeds");
-            let cached = scalar.read().expect("read cached value");
-            assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
-        }
-
-        {
-            let mut 
-            scalar.write(0xDEADBEEF).expect("write succeeds");
-            let cached = scalar.read().expect("read cached value");
-            assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
-        }
+        let handle = bus.resolve(0x1000).expect("valid address");
+        let mut little = DataView::new(handle, AccessContext::CPU);
+        little
+            .write_u32(0xDEADBEEF)
+            .expect("write succeeds on little-endian device");
         assert_eq!(
-            cursor.bus_address(),
-            Some(0x1004),
-            "cursor should advance by the scalar size"
+            little.get_handle().get_position(),
+            4,
+            "writes should advance the underlying cursor"
         );
-        cursor.jump(0x1000).unwrap();
-        let value = cursor
-            .scalar_handle(4)
-            .expect("pin is valid")
-            .read()
-            .expect("read succeeds");
-        assert_eq!(
-            value, 0xDEADBEEF,
-            "scalar helper should read the written value on big-endian device"
-        );
+        little.get_handle_mut().seek(0).expect("reset cursor to start");
+        let value = little.read_u32().expect("read back little-endian value");
+        assert_eq!(value, 0xDEADBEEF, "round trip should match written data");
 
-        cursor.jump(0x2000).expect("valid address");
-        {
-            let mut scalar = cursor.scalar_handle(4).expect("pin is valid");
-            scalar.write(0xDEADBEEF).expect("write succeeds");
-            let cached = scalar.read().expect("read cached value");
-            assert_eq!(cached, 0xDEADBEEF, "cached value matches written");
-        }
-        assert_eq!(
-            cursor.bus_address(),
-            Some(0x2004),
-            "cursor should advance by the scalar size"
-        );
-        cursor.jump(0x2000).unwrap();
-        let value = cursor
-            .scalar_handle(4)
-            .expect("pin is valid")
-            .read()
-            .expect("read succeeds");
-        assert_eq!(
-            value, 0xDEADBEEF,
-            "scalar helper should read the written value on big-endian device"
-        );
+        let handle = bus.resolve(0x2000).expect("valid address");
+        let mut big = DataView::new(handle, AccessContext::CPU);
+        big.write_u32(0x01020304)
+            .expect("write succeeds on big-endian device");
+        big.get_handle_mut().seek(0).expect("reset cursor to start");
+        let value = big.read_u32().expect("read back big-endian value");
+        assert_eq!(value, 0x01020304, "round trip should respect endianness");
     }
 }

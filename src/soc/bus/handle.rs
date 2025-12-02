@@ -37,6 +37,12 @@ impl DeviceHandle {
             size,
         }
     }
+
+    pub fn peek(&mut self, out: &mut [u8]) -> BusResult<()> {
+        let mut dev = self.device.lock()?;
+        dev.read(self.offset, out, AccessContext::DEBUG)?;
+        Ok(())
+    }
     // Functional access (advances cursor if needed, though usually fixed width)
     pub fn read(&mut self, out: &mut [u8], ctx: AccessContext) -> BusResult<()> {
         //Reads could mutate the underlying

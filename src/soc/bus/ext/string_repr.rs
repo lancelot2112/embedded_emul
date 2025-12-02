@@ -1,6 +1,6 @@
 //! Helpers for building printable representations from bus data.
 
-use crate::soc::bus::{BusResult, CursorBehavior, DataView};
+use crate::soc::bus::{BusResult, DataView};
 
 pub trait StringReprDataViewExt {
     fn read_hex(&mut self, length: usize) -> BusResult<String>;
@@ -27,7 +27,7 @@ impl StringReprDataViewExt for DataView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::bus::{DeviceBus, StaticCursor};
+    use crate::soc::bus::{DeviceBus};
     use crate::soc::device::{AccessContext, Device, Endianness, RamMemory};
 
     fn make_handle(bytes: &[u8]) -> DataView{

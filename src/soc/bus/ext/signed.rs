@@ -1,6 +1,6 @@
 //! Integer helpers that perform width-aware reads and sign/zero extension on top of `DataHandle`.
 
-use crate::soc::bus::{BusResult, CursorBehavior, DataView};
+use crate::soc::bus::{BusResult, DataView};
 
 /// Trait adding width-aware integer reads directly on top of `DataHandle`.
 pub trait SignedDataViewExt {
@@ -32,42 +32,53 @@ impl SignedDataViewExt for DataView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::soc::bus::{DeviceBus};
-    use crate::soc::device::{AccessContext, Endianness as DeviceEndianness, RamMemory};
+    use crate::soc::bus::DeviceBus;
+    use crate::soc::device::{AccessContext, Endianness as DeviceEndianness, Device, RamMemory};
 
-    fn make_handle(bytes: &[u8]) -> DataView {
+    fn make_view(bytes: &[u8], endian: DeviceEndianness) -> DataView {
         let mut bus = DeviceBus::new();
-        let mut memory = RamMemory::new("ram", 0x20, DeviceEndianness::Little);
+        let mut memory = RamMemory::new("ram", 0x20, endian);
+        memory
+            .write(0, bytes, AccessContext::DEBUG)
+            .expect("write preload");
         bus.map_device(memory, 0, 0).unwrap();
-        let mut handle = bus.resolve(0).unwrap();
-        handle.write(bytes, AccessContext::DEBUG).expect("write preload");
+        let handle = bus.resolve(0).unwrap();
         DataView::new(handle, AccessContext::CPU)
     }
-
+    
     #[test]
-    fn read_unsigned_matches_expected_value() {
-        let mut handle = make_handle(&[0x34, 0x12, 0, 0]);
-        let value = handle.read_unsigned(0, 16).expect("read u16");
-        assert_eq!(value, 0x1234, "big-endian decode should match reference");
+    fn read_i8_sign_extends_negative_values() {
+        let mut view = make_view(&[0xFE], DeviceEndianness::Little);
+        let value = view.read_i8().expect("read i8");
+        assert_eq!(value, -2, "0xFE should sign extend to -2");
     }
 
     #[test]
-    fn read_signed_sign_extends_properly() {
-        let mut handle = make_handle(&[0x80]);
-        let value = handle.read_signed(0, 8).expect("read i8");
-        assert_eq!(value, -128, "sign extension should honor the MSB");
+    fn read_i16_sign_extends_on_little_endian() {
+        let source = [0x34, 0xFF];
+        let mut view = make_view(&source, DeviceEndianness::Little);
+        let value = view.read_i16().expect("read i16");
+        assert_eq!(value, i16::from_le_bytes(source), "bytes should round-trip");
     }
 
     #[test]
-    fn write_unsigned_respects_bit_offset() {
-        let mut handle = make_handle(&[0; 2]);
-        handle.write_unsigned(4, 8, 0xAB).expect("write field");
-        handle.address_mut().jump(0).unwrap();
-        let raw = handle.read_unsigned(0, 16).expect("read word");
-        assert_eq!(raw, 0x0AB0, "write should update the correct bit window");
+    fn read_i32_respects_big_endian_layout() {
+        let source = [0xFE, 0xDC, 0xBA, 0x98];
+        let mut view = make_view(&source, DeviceEndianness::Big);
+        let value = view.read_i32().expect("read i32");
+        assert_eq!(value, i32::from_be_bytes(source), "big-endian bytes should sign extend correctly");
+    }
 
-        handle.address_mut().jump(0).unwrap();
-        let field = handle.read_unsigned(4, 8).expect("read field");
-        assert_eq!(field, 0xAB, "field should retain the written value");
+    #[test]
+    fn read_i64_consumes_full_width_and_sign_extends() {
+        let source = [0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0xF1];
+        let mut view = make_view(&source, DeviceEndianness::Little);
+        let value = view.read_i64().expect("read i64");
+        assert_eq!(value, i64::from_le_bytes(source), "little-endian bytes should sign extend correctly");
+        assert_eq!(
+            view.get_handle().get_position(),
+            8,
+            "reading i64 should advance the cursor by 8 bytes",
+        );
     }
 }
