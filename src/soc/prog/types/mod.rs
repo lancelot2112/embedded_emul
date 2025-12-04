@@ -10,6 +10,7 @@ pub mod expr;
 pub mod fmt;
 pub mod literal;
 pub mod pointer;
+pub mod range;
 pub mod record;
 pub mod scalar;
 pub mod sequence;
@@ -26,6 +27,7 @@ pub use literal::{
     Literal, LiteralError, LiteralKind, parse_index_suffix, parse_u32_literal, parse_u64_literal,
 };
 pub use pointer::{PointerKind, PointerQualifiers, PointerType};
+pub use range::{RangeSpec, RangeSpecError};
 pub use record::{LayoutSize, MemberRecord, MemberSpan, OpaqueType, TypeRecord};
 pub use scalar::{DisplayFormat, EnumType, ScalarEncoding, ScalarType};
 pub use sequence::{CountSource, SequenceCount, SequenceType};
