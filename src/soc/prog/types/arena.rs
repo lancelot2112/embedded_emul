@@ -111,7 +111,6 @@ impl TypeArena {
 mod tests {
     //! Basic coverage for arena bookkeeping and string interning layers.
     use super::*;
-    use crate::soc::prog::types::record::TypeRecord;
     use crate::soc::prog::types::scalar::{DisplayFormat, ScalarEncoding, ScalarType};
 
     #[test]
@@ -119,7 +118,7 @@ mod tests {
         // The first pushed record should get index zero encoded as NonZeroU32::new(1)
         let mut arena = TypeArena::new();
         let scalar = ScalarType::new(None, 1, ScalarEncoding::Unsigned, DisplayFormat::Default);
-        let id = arena.push_record(TypeRecord::Scalar(scalar));
+        let id = arena.push_record(scalar.into());
         assert_eq!(id.index(), 0, "Dense indices keep traversal cache-friendly");
     }
 

@@ -2,6 +2,11 @@
 
 use smallvec::SmallVec;
 
+use crate::soc::{
+    bus::{BusCursor, BusResult},
+    prog::types::TypeRecord,
+};
+
 use super::arena::StringId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,9 +28,11 @@ pub enum DisplayFormat {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScalarType {
     pub name_id: Option<StringId>,
+    pub bit_size: u16,
     pub byte_size: usize,
     pub encoding: ScalarEncoding,
     pub display: DisplayFormat,
+    storage: ScalarStorage,
 }
 
 impl ScalarType {
@@ -35,12 +42,37 @@ impl ScalarType {
         encoding: ScalarEncoding,
         display: DisplayFormat,
     ) -> Self {
+        let storage = ScalarStorage::for_bytes(byte_size);
         Self {
             name_id,
+            bit_size: (byte_size as u16) * 8,
             byte_size,
             encoding,
             display,
+            storage,
         }
+    }
+
+    pub fn with_bits(
+        name_id: Option<StringId>,
+        bit_size: u16,
+        encoding: ScalarEncoding,
+        display: DisplayFormat,
+    ) -> Self {
+        let byte_size = ((bit_size as usize) + 7) / 8;
+        let storage = ScalarStorage::for_bytes(byte_size);
+        Self {
+            name_id,
+            bit_size,
+            byte_size,
+            encoding,
+            display,
+            storage,
+        }
+    }
+
+    pub fn is_signed(&self) -> bool {
+        matches!(self.encoding, ScalarEncoding::Signed)
     }
 
     pub fn format_unsigned(&self, value: u64) -> String {
@@ -51,6 +83,49 @@ impl ScalarType {
             DisplayFormat::DotNotation => format_dot_notation(value, self.byte_size),
             _ => value.to_string(),
         }
+    }
+
+    pub fn read_unsigned(&self, cursor: &mut BusCursor) -> BusResult<u128> {
+        let raw = self.storage.read(cursor)?;
+        Ok(raw & self.value_mask())
+    }
+
+    pub fn read_signed(&self, cursor: &mut BusCursor) -> BusResult<i128> {
+        let unsigned = self.read_unsigned(cursor)?;
+        if self.bit_size == 0 {
+            return Ok(0);
+        }
+        let shift = 128 - self.bit_size as u32;
+        Ok(((unsigned << shift) as i128) >> shift)
+    }
+
+    pub fn write_unsigned(&self, cursor: &mut BusCursor, value: u128) -> BusResult<()> {
+        let masked = value & self.value_mask();
+        self.storage.write(cursor, masked)
+    }
+
+    pub fn write_signed(&self, cursor: &mut BusCursor, value: i128) -> BusResult<()> {
+        let masked = if self.bit_size == 0 {
+            0
+        } else {
+            let shift = 128 - self.bit_size as u32;
+            ((value << shift) as u128) >> shift
+        };
+        self.storage.write(cursor, masked)
+    }
+
+    fn value_mask(&self) -> u128 {
+        match self.bit_size {
+            0 => 0,
+            128 => u128::MAX,
+            bits => (1u128 << bits) - 1,
+        }
+    }
+}
+
+impl From<ScalarType> for TypeRecord {
+    fn from(value: ScalarType) -> Self {
+        TypeRecord::Scalar(value)
     }
 }
 
@@ -117,6 +192,52 @@ impl FixedScalar {
 
     pub fn apply(&self, raw: i64) -> f64 {
         (raw as f64) * self.scale + self.offset
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScalarStorage {
+    Zero,
+    U8,
+    U16,
+    U32,
+    U64,
+    U128,
+}
+
+impl ScalarStorage {
+    fn for_bytes(bytes: usize) -> Self {
+        match bytes {
+            0 => ScalarStorage::Zero,
+            1 => ScalarStorage::U8,
+            2 => ScalarStorage::U16,
+            4 => ScalarStorage::U32,
+            8 => ScalarStorage::U64,
+            16 => ScalarStorage::U128,
+            other => panic!("unsupported scalar width: {other} bytes"),
+        }
+    }
+
+    fn read(self, cursor: &mut BusCursor) -> BusResult<u128> {
+        match self {
+            ScalarStorage::Zero => Ok(0),
+            ScalarStorage::U8 => cursor.read_u8().map(|v| v as u128),
+            ScalarStorage::U16 => cursor.read_u16().map(|v| v as u128),
+            ScalarStorage::U32 => cursor.read_u32().map(|v| v as u128),
+            ScalarStorage::U64 => cursor.read_u64().map(|v| v as u128),
+            ScalarStorage::U128 => cursor.read::<u128>().map(|v| v as u128),
+        }
+    }
+
+    fn write(self, cursor: &mut BusCursor, value: u128) -> BusResult<()> {
+        match self {
+            ScalarStorage::Zero => Ok(()),
+            ScalarStorage::U8 => cursor.write_u8(value as u8),
+            ScalarStorage::U16 => cursor.write_u16(value as u16),
+            ScalarStorage::U32 => cursor.write_u32(value as u32),
+            ScalarStorage::U64 => cursor.write_u64(value as u64),
+            ScalarStorage::U128 => cursor.write::<u128>(value),
+        }
     }
 }
 

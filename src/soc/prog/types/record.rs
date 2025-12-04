@@ -108,10 +108,9 @@ pub enum TypeRecord {
 
 impl TypeRecord {
     pub fn as_scalar(&self) -> Option<&ScalarType> {
-        if let TypeRecord::Scalar(value) = self {
-            Some(value)
-        } else {
-            None
+        match self {
+            TypeRecord::Scalar(value) => Some(value),
+            _ => None,
         }
     }
 }
