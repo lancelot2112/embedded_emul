@@ -1,0 +1,61 @@
+{
+  "name": "nanemu-isa-tools",
+  "displayName": "Nanemu ISA Support",
+  "description": "Language Client that connects VS Code to the Nanemu ISA language server.",
+  "version": "0.1.0",
+  "publisher": "nanemu",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onLanguage:nanemu-isa"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "nanemu-isa",
+        "aliases": ["Nanemu ISA"],
+        "extensions": [".isa", ".isaext", ".coredef", ".sysdef"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "title": "Nanemu ISA Language Server",
+      "properties": {
+        "nanemu.isaLanguageServer.serverCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Optional path to a prebuilt isa_language_server binary. Leave empty to use 'cargo run'."
+        },
+        "nanemu.isaLanguageServer.serverArgs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional command-line arguments passed to the language server command."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts",
+    "clean": "rimraf dist",
+    "test": "echo 'No tests yet'"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "eslint": "^9.13.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.6.3",
+    "@vscode/vsce": "^3.1.0"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}

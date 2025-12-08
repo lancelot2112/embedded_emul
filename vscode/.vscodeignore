@@ -1,0 +1,7 @@
+.vscode/**
+.git/**
+src/**
+node_modules/.bin/**
+tsconfig.json
+.eslintrc.json
+README.md
