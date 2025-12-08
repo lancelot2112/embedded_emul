@@ -467,7 +467,7 @@ impl BitFieldSpec {
                 (BitFieldSegment::Literal { value, width }, _) => {
                     let width_u16 = *width as u16;
                     let mask = mask_for_width(width_u16);
-                    acc = (acc << width_u16) | u128::from((*value as u64) & mask);
+                    acc = (acc << width_u16) | u128::from(*value & mask);
                     acc_width += width_u16;
                 }
                 (BitFieldSegment::Slice(_), None) => return None,
@@ -537,10 +537,7 @@ impl BitFieldSpec {
                 total,
             }));
         }
-        let scatter = match bmi2::pdep(deposit_bits, self.mask) {
-            Some(bits) => bits,
-            None => return None,
-        };
+        let scatter = bmi2::pdep(deposit_bits, self.mask)?;
         let cleared = container & !self.mask;
         Some(Ok(cleared | scatter))
     }
@@ -596,9 +593,8 @@ impl BitFieldSpecBuilder {
     pub fn finish(mut self) -> BitFieldSpec {
         // If empty, default to a full-width slice
         if self.segments.is_empty() {
-            self.segments.push(BitFieldSegment::Slice(
-                BitSlice::new(0, self.storage.bit_size() as u16).unwrap(),
-            ));
+            self.segments
+                .push(BitFieldSegment::Slice(BitSlice::new(0, self.storage.bit_size()).unwrap()));
         }
         let mut spec = BitFieldSpec {
             storage: self.storage,

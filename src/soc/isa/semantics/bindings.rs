@@ -82,6 +82,10 @@ impl OperandBinder {
     pub fn len(&self) -> usize {
         self.bindings.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.bindings.is_empty()
+    }
 }
 
 impl ParameterBindings {

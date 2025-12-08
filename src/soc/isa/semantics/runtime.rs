@@ -45,10 +45,10 @@ impl SemanticRuntime {
     }
 
     pub fn emit_trace(&self, event: TraceEvent) {
-        if let Some(cell) = &self.tracer {
-            if let Ok(mut tracer) = cell.try_borrow_mut() {
-                tracer.on_event(event);
-            }
+        if let Some(cell) = &self.tracer
+            && let Ok(mut tracer) = cell.try_borrow_mut()
+        {
+            tracer.on_event(event);
         }
     }
 
@@ -142,6 +142,7 @@ impl SemanticRuntime {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn assign_target<'ctx>(
         &self,
         machine: &MachineDescription,
@@ -171,6 +172,7 @@ impl SemanticRuntime {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn write_register_target<'ctx>(
         &self,
         machine: &MachineDescription,

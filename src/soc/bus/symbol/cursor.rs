@@ -70,7 +70,7 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
         };
         let arena = self.handle.table.type_arena();
         SymbolBus::interpret_type_at(
-            &mut self.handle.cursor,
+            &mut *self.handle.cursor,
             arena.as_ref(),
             target,
             address as usize,
@@ -84,7 +84,7 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
         entry: &SymbolWalkEntry,
         data: &[u8],
     ) -> Result<(), SymbolAccessError> {
-        let expected = entry.byte_len() as usize;
+        let expected = entry.byte_len();
         if expected != data.len() {
             return Err(SymbolAccessError::Bus(BusError::DeviceFault {
                 device: "symbol".into(),
@@ -108,7 +108,7 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
         {
             let record = self.arena.get(entry.ty);
             let mut ctx = ReadContext::new(
-                &mut self.handle.cursor,
+                &mut *self.handle.cursor,
                 self.arena,
                 address,
                 Some(entry.byte_len()),

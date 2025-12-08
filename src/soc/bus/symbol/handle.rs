@@ -59,7 +59,7 @@ impl<'a> SymbolBus<'a> {
         symbol: TableSymbolHandle,
     ) -> Result<SymbolValue, SymbolAccessError> {
         let snapshot = self.prepare(symbol)?;
-        SymbolBus::read_snapshot_value(self.table, &mut self.cursor, &snapshot)
+        SymbolBus::read_snapshot_value(self.table, &mut *self.cursor, &snapshot)
     }
 
     pub fn read_raw_bytes(
@@ -97,7 +97,7 @@ impl<'a> SymbolBus<'a> {
 
     fn read_bytes(&mut self, snapshot: &Snapshot) -> Result<&[u8], SymbolAccessError> {
         self.cursor.goto(snapshot.address)?;
-        let buf = self.cursor.read_ram(snapshot.size as usize)?;
+        let buf = self.cursor.read_ram(snapshot.size)?;
         Ok(buf)
     }
 
@@ -128,7 +128,7 @@ impl<'a> SymbolBus<'a> {
             return Ok(value);
         }
         cursor.goto(snapshot.address)?;
-        let bytes = cursor.read_ram(snapshot.size as usize)?.to_vec();
+        let bytes = cursor.read_ram(snapshot.size)?.to_vec();
         Ok(SymbolValue::Bytes(bytes))
     }
 

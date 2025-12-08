@@ -85,6 +85,10 @@ impl TupleValue {
         self.items.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
     pub fn ensure_len(&self, expected: usize) -> Result<(), IsaError> {
         if self.items.len() == expected {
             Ok(())

@@ -93,7 +93,7 @@ impl CoreState {
 
     pub fn zeroize(&mut self) -> StateResult<()> {
         self.cursor.goto(0)?;
-        let buffer = vec![0u8; self.spec.byte_len() as usize];
+        let buffer = vec![0u8; self.spec.byte_len()];
         self.cursor.write_ram(&buffer)?;
         Ok(())
     }
@@ -171,7 +171,7 @@ fn align_byte_len(len: usize) -> usize {
     if len == 0 {
         8
     } else {
-        (len.saturating_add(7) / 8) * 8
+        len.div_ceil(8) * 8
     }
 }
 

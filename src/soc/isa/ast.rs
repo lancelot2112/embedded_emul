@@ -77,6 +77,7 @@ pub enum SpaceAttribute {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // Variants mirror DSL syntax, so boxing would complicate parsing
 pub enum SpaceMember {
     Field(FieldDecl),
     Form(FormDecl),

@@ -195,7 +195,7 @@ pub fn encode_constant(
 }
 
 pub fn ensure_byte_aligned(word_bits: u32, instr: &str) -> Result<usize, IsaError> {
-    if word_bits % 8 != 0 {
+    if !word_bits.is_multiple_of(8) {
         return Err(IsaError::Machine(format!(
             "instruction '{}' width ({word_bits} bits) is not byte-aligned",
             instr

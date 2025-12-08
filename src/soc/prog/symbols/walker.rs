@@ -164,7 +164,7 @@ impl<'arena> SymbolWalker<'arena> {
         }
         let members = self.arena.members(aggregate.members);
         for member in members.iter().rev() {
-            let offset_bits = offset_bits + member.offset_bits as usize;
+            let offset_bits = offset_bits + member.offset_bits;
             let path = path.push_member(member.name_id);
             self.stack.push(FrameState::Type {
                 ty: member.ty,

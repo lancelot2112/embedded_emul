@@ -39,7 +39,7 @@ impl Endianness {
     }
 
     #[inline(always)]
-    pub fn fill<'a>(self, buf: &'a mut [u8; 8], size: usize) -> &'a mut [u8] {
+    pub fn fill(self, buf: &mut [u8; 8], size: usize) -> &mut [u8] {
         assert!(size <= 8, "size exceeds 8 bytes");
         match self {
             Endianness::Little => &mut buf[0..size],

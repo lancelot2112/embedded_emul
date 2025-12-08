@@ -93,13 +93,13 @@ impl<'machine> RegisterAccess<'machine> {
         }
 
         if let Some((metadata, element)) = self.schema.find_by_label(space, name) {
-            if let Some(index) = evaluated_index {
-                if index != element.index as i64 {
-                    return Err(IsaError::Machine(format!(
-                        "register '{}' already selects element '{}' and cannot mix with index {}",
-                        name, element.label, index
-                    )));
-                }
+            if let Some(index) = evaluated_index
+                && index != element.index as i64
+            {
+                return Err(IsaError::Machine(format!(
+                    "register '{}' already selects element '{}' and cannot mix with index {}",
+                    name, element.label, index
+                )));
             }
             let field = self.select_field(metadata, subfield, name, alias_fields)?;
             return Ok(Some(ResolvedRegister::new(
@@ -121,13 +121,11 @@ impl<'machine> RegisterAccess<'machine> {
         evaluated_index: Option<i64>,
     ) -> Result<&'schema RegisterElement, IsaError> {
         if metadata.count <= 1 {
-            if let Some(index) = evaluated_index {
-                if index != 0 {
-                    return Err(IsaError::Machine(format!(
-                        "register '{}' has a single element and cannot use index {index}",
-                        register_name
-                    )));
-                }
+            if let Some(index) = evaluated_index && index != 0 {
+                return Err(IsaError::Machine(format!(
+                    "register '{}' has a single element and cannot use index {index}",
+                    register_name
+                )));
             }
             return metadata.elements.first().ok_or_else(|| {
                 IsaError::Machine(format!(
@@ -304,7 +302,7 @@ impl<'schema> ResolvedRegister<'schema> {
             let spec = self.field_spec(field)?;
             let container = self.read_raw(state)?;
             let (value, _) = spec.read_bits(container);
-            Ok(value as u64)
+            Ok(value)
         } else {
             state
                 .read_register(&self.resolved_name)
@@ -316,14 +314,8 @@ impl<'schema> ResolvedRegister<'schema> {
     pub fn write_bits(&self, state: &mut CoreState, value: u64) -> Result<(), IsaError> {
         if let Some(field) = self.field {
             let spec = self.field_spec(field)?;
-            let narrow = u64::try_from(value).map_err(|_| {
-                IsaError::Machine(format!(
-                    "value 0x{value:X} exceeds capacity of subfield '{}::{}'",
-                    self.metadata.space, field.name
-                ))
-            })?;
             let container = self.read_raw(state)?;
-            let updated = spec.write_to(container, narrow).map_err(|err| {
+            let updated = spec.write_to(container, value).map_err(|err| {
                 IsaError::Machine(format!(
                     "failed to write subfield '{}::{}': {err}",
                     self.metadata.space, field.name
@@ -359,7 +351,7 @@ impl<'schema> ResolvedRegister<'schema> {
         } else {
             let masked = mask_to_width(value, self.metadata.bit_width);
             state
-                .write_register(&self.resolved_name, masked as u64)
+                .write_register(&self.resolved_name, masked)
                 .map_err(core_state_error)
         }
     }
@@ -374,12 +366,12 @@ impl<'schema> ResolvedRegister<'schema> {
                 self.metadata.space, self.element.label
             )));
         }
-        Ok(value as u64)
+        Ok(value)
     }
 
     fn write_raw(&self, state: &mut CoreState, value: u64) -> Result<(), IsaError> {
         state
-            .write_register(&self.resolved_name, value as u64)
+            .write_register(&self.resolved_name, value)
             .map_err(core_state_error)
     }
 
@@ -442,12 +434,10 @@ fn resolve_reference_path(
     current_space: &str,
     reference: &ContextReference,
 ) -> (String, Vec<String>) {
-    if let Some(first) = reference.segments.first() {
-        if first.starts_with('$') {
-            let space = first.trim_start_matches('$').to_string();
-            let rest = reference.segments[1..].to_vec();
-            return (space, rest);
-        }
+    if let Some(first) = reference.segments.first() && first.starts_with('$') {
+        let space = first.trim_start_matches('$').to_string();
+        let rest = reference.segments[1..].to_vec();
+        return (space, rest);
     }
     (current_space.to_string(), reference.segments.clone())
 }

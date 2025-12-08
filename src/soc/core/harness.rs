@@ -100,7 +100,7 @@ impl ExecutionHarness<SoftwareHost> {
             core_name,
             machine,
             endianness_override,
-            SoftwareHost::default(),
+            SoftwareHost,
         )
     }
 }

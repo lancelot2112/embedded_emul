@@ -13,10 +13,10 @@ pub(super) fn format_operand(
     value: u64,
 ) -> String {
     if let Some(binding) = &field.register {
-        if let Some(space) = machine.spaces.get(&binding.space) {
-            if let Some(register) = space.registers.get(&binding.field) {
-                return register.format(value);
-            }
+        if let Some(space) = machine.spaces.get(&binding.space)
+            && let Some(register) = space.registers.get(&binding.field)
+        {
+            return register.format(value);
         }
         return format!("{}{}", binding.field, value);
     }
@@ -66,7 +66,7 @@ fn format_immediate(field: &FieldEncoding, value: u64) -> String {
     if bits == 0 {
         bits = 1;
     }
-    let digits = ((bits as usize) + 3) / 4;
+    let digits = (bits as usize).div_ceil(4);
     let truncated = if bits >= 64 {
         value
     } else {

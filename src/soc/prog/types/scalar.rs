@@ -57,7 +57,7 @@ impl ScalarType {
         encoding: ScalarEncoding,
         display: DisplayFormat,
     ) -> Self {
-        let byte_size = ((bit_size as usize) + 7) / 8;
+        let byte_size = (bit_size as usize).div_ceil(8);
         let storage = ScalarStorage::for_bytes(byte_size);
         Self {
             name_id,
@@ -76,7 +76,7 @@ impl ScalarType {
     pub fn format_unsigned(&self, value: u64) -> String {
         match self.display {
             DisplayFormat::Hex => {
-                format!("0x{value:0width$x}", width = (self.byte_size * 2) as usize)
+                format!("0x{value:0width$x}", width = self.byte_size * 2)
             }
             DisplayFormat::DotNotation => format_dot_notation(value, self.byte_size),
             _ => value.to_string(),
@@ -185,7 +185,7 @@ impl ScalarStorage {
     }
 
     pub(crate) fn for_bits(bits: usize) -> Self {
-        let bytes = (bits + 7) / 8;
+        let bytes = bits.div_ceil(8);
         Self::for_bytes(bytes)
     }
 
@@ -218,7 +218,7 @@ impl ScalarStorage {
             ScalarStorage::U16 => cursor.read_u16().map(|v| v as u128),
             ScalarStorage::U32 => cursor.read_u32().map(|v| v as u128),
             ScalarStorage::U64 => cursor.read_u64().map(|v| v as u128),
-            ScalarStorage::U128 => cursor.read::<u128>().map(|v| v as u128),
+            ScalarStorage::U128 => cursor.read::<u128>(),
         }
     }
 

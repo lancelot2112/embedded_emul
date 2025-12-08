@@ -136,7 +136,7 @@ impl SoftMMU {
     fn translate_physical(&self, addr: VirtAddr) -> BusResult<(usize, MMUFlags, DeviceRef)> {
         let (device, phys_range) = self.bus.resolve_device_at(addr)?;
         let device_offset = phys_range.device_offset + (addr - phys_range.bus_start);
-        let mut flags = Self::flags_for_device_flags(
+        let flags = Self::flags_for_device_flags(
             &device,
             MMUFlags::VALID | MMUFlags::READ | MMUFlags::WRITE | MMUFlags::EXEC,
         );
@@ -173,8 +173,7 @@ impl SoftMMU {
         let offset = vaddr - entry.vaddr;
         let device_offset = entry.device_offset + offset;
         let device = entry.device.clone();
-        let mut flags = entry.flags | MMUFlags::VALID;
-        flags = Self::flags_for_device_flags(&device, flags);
+        let flags = Self::flags_for_device_flags(&device, entry.flags | MMUFlags::VALID);
 
         if let Some(ram) = device.as_ram() {
             let host_ptr = ram.ptr_at(device_offset) as usize;
@@ -186,10 +185,13 @@ impl SoftMMU {
     }
 
     fn overlaps(&self, start: VirtAddr, end: VirtAddr) -> bool {
-        if let Some((_, region)) = self.regions.range(..=start).next_back() {
-            if region.vaddr + region.size > start {
-                return true;
-            }
+        if self
+            .regions
+            .range(..=start)
+            .next_back()
+            .is_some_and(|(_, region)| region.vaddr + region.size > start)
+        {
+            return true;
         }
         self.regions.range(start..end).next().is_some()
     }

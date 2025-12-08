@@ -85,7 +85,7 @@ impl MachineDescription {
                 })?;
                 bits = field
                     .spec
-                    .write_to(bits, (*value as i64) as u64)
+                    .write_to(bits, *value as u64)
                     .map_err(|err| {
                         IsaError::Machine(format!(
                             "failed to encode operand '{name}' on '{}': {err}",
@@ -193,10 +193,12 @@ fn parse_operand_value(
         )));
     }
 
-    if field.kind == OperandKind::Register {
-        if let Some(stripped) = raw.strip_prefix('r').or_else(|| raw.strip_prefix('R')) {
-            return parse_numeric(stripped);
-        }
+    if let Some(stripped) = raw
+        .strip_prefix('r')
+        .or_else(|| raw.strip_prefix('R'))
+        .filter(|_| field.kind == OperandKind::Register)
+    {
+        return parse_numeric(stripped);
     }
 
     parse_numeric(raw)
@@ -205,7 +207,7 @@ fn parse_operand_value(
 fn parse_numeric(raw: &str) -> Result<i64, IsaError> {
     let trimmed = raw.trim();
     let sign = if trimmed.starts_with('-') { -1 } else { 1 };
-    let number = trimmed.trim_start_matches(|ch| ch == '-' || ch == '+');
+    let number = trimmed.trim_start_matches(['-', '+']);
     let token = number.replace('_', "");
     let (base, digits) = if let Some(hex) = token
         .strip_prefix("0x")

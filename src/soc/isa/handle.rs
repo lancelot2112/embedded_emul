@@ -27,7 +27,7 @@ impl IsaHandle {
         len: usize,
     ) -> Result<Vec<Disassembly>, IsaError> {
         let buf = data.read_ram(len)?;
-        Ok(self.machine.disassemble(&buf))
+        Ok(self.machine.disassemble(buf))
     }
 
     /// Emits semantic IR for a previously decoded instruction mnemonic. In the future this will

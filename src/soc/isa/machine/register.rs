@@ -107,13 +107,15 @@ fn parse_register_op(op: &SubFieldOp) -> Option<RegisterBinding> {
     if let Some(binding) = parse_context_style_register(op) {
         return Some(binding);
     }
-    if op.kind.eq_ignore_ascii_case("reg") {
-        if let Some(field) = &op.subtype {
-            return Some(RegisterBinding {
-                space: "reg".into(),
-                field: field.clone(),
-            });
-        }
+    if let Some(field) = op
+        .subtype
+        .as_ref()
+        .filter(|_| op.kind.eq_ignore_ascii_case("reg"))
+    {
+        return Some(RegisterBinding {
+            space: "reg".into(),
+            field: field.clone(),
+        });
     }
     None
 }
@@ -568,10 +570,12 @@ fn resolve_register_bit_width(
         return Ok(info.size_bits.unwrap_or(default_bits));
     }
     for info in space.registers.values() {
-        if let Some(range) = &info.range {
-            if register_label_matches(info, range, target) {
-                return Ok(info.size_bits.unwrap_or(default_bits));
-            }
+        if info
+            .range
+            .as_ref()
+            .is_some_and(|range| register_label_matches(info, range, target))
+        {
+            return Ok(info.size_bits.unwrap_or(default_bits));
         }
     }
     Err(IsaError::Machine(format!(
@@ -633,7 +637,7 @@ fn materialize_elements(info: &RegisterInfo) -> Vec<PendingElement> {
 }
 
 fn element_bytes(bit_width: usize) -> usize {
-    ((bit_width + 7) / 8).max(1)
+    bit_width.div_ceil(8).max(1)
 }
 
 fn collect_subfield_specs(

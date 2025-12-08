@@ -10,7 +10,7 @@ pub trait CryptoCursorExt {
 impl CryptoCursorExt for BusCursor {
     fn calc_sha256(&mut self, len: usize) -> BusResult<[u8; 32]> {
         let buffer = self.read_ram(len)?;
-        let digest = Sha256::digest(&buffer);
+        let digest = Sha256::digest(buffer);
         let mut array = [0u8; 32];
         array.copy_from_slice(&digest);
         Ok(array)

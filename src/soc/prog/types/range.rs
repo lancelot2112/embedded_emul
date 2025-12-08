@@ -112,7 +112,7 @@ impl IntoIterator for RangeSpec {
     }
 }
 
-impl<'a> IntoIterator for &'a RangeSpec {
+impl IntoIterator for &RangeSpec {
     type Item = u64;
     type IntoIter = Range<u64>;
 

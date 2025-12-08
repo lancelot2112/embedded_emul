@@ -183,11 +183,9 @@ impl PendingMember {
     }
 
     fn finalize(mut self, arena: &mut TypeArena) -> MemberRecord {
-        if let Some(plan) = self.scalar_fields {
-            if !plan.is_empty() {
-                let ty = plan.build(arena);
-                self.record.ty = ty;
-            }
+        if let Some(plan) = self.scalar_fields.filter(|plan| !plan.is_empty()) {
+            let ty = plan.build(arena);
+            self.record.ty = ty;
         }
         self.record
     }

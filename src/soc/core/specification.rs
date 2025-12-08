@@ -46,7 +46,7 @@ impl CoreSpec {
     }
 
     pub fn byte_len(&self) -> usize {
-        ((self.total_bits as usize + 7) / 8).max(1)
+        (self.total_bits as usize).div_ceil(8).max(1)
     }
 }
 

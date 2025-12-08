@@ -117,10 +117,12 @@ impl DeviceBus {
 
     fn has_blocking_overlap(&self, start: usize, end: usize, priority: u8) -> bool {
         for key in self.collect_overlap_keys(start, end) {
-            if let Some(existing) = self.map.get(&key) {
-                if existing.priority >= priority {
-                    return true;
-                }
+            if self
+                .map
+                .get(&key)
+                .is_some_and(|existing| existing.priority >= priority)
+            {
+                return true;
             }
         }
         false
@@ -197,10 +199,13 @@ impl DeviceBus {
 
     fn collect_overlap_keys(&self, start: usize, end: usize) -> Vec<usize> {
         let mut keys = Vec::new();
-        if let Some((&key, range)) = self.map.range(..=start).next_back() {
-            if range.bus_end > start {
-                keys.push(key);
-            }
+        if let Some((&key, _)) = self
+            .map
+            .range(..=start)
+            .next_back()
+            .filter(|(_, range)| range.bus_end > start)
+        {
+            keys.push(key);
         }
         for (&key, _) in self.map.range(start..end) {
             keys.push(key);

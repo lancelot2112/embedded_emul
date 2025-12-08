@@ -16,14 +16,8 @@ impl StringReprCursorExt for BusCursor {
     fn read_ascii(&mut self, length: usize) -> BusResult<String> {
         let buf = self.read_ram(length)?;
         Ok(buf
-            .into_iter()
-            .map(|b| {
-                if b.is_ascii_graphic() {
-                    *b as char
-                } else {
-                    '.'
-                }
-            })
+            .iter()
+            .map(|&b| if b.is_ascii_graphic() { b as char } else { '.' })
             .collect())
     }
 }

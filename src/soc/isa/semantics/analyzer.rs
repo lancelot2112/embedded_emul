@@ -47,7 +47,7 @@ impl<'machine> SemanticAnalyzer<'machine> {
             .global_params
             .iter()
             .cloned()
-            .chain(operands.into_iter());
+            .chain(operands);
         let mut scope = AnalyzerScope::new(params);
         self.validate_program(program, &mut scope)
     }
@@ -310,14 +310,13 @@ impl<'machine> SemanticAnalyzer<'machine> {
             return;
         }
         let mut register = space.registers.get(register_name);
-        if register.is_none() {
-            if let Some((metadata, _)) = self
+        if register.is_none()
+            && let Some((metadata, _)) = self
                 .machine
                 .register_schema()
                 .find_by_label(space_name, register_name)
-            {
-                register = space.registers.get(&metadata.name);
-            }
+        {
+            register = space.registers.get(&metadata.name);
         }
         let Some(register) = register else {
             self.push_diag(
@@ -331,18 +330,18 @@ impl<'machine> SemanticAnalyzer<'machine> {
             );
             return;
         };
-        if let Some(field) = subfield {
-            if !register.subfields.iter().any(|sub| sub.name == field) {
-                self.push_diag(
-                    diags,
-                    "semantics.unknown-register-subfield",
-                    format!(
-                        "register '{}::{}' has no subfield '{}'",
-                        space_name, register_name, field
-                    ),
-                    span,
-                );
-            }
+        if let Some(field) = subfield
+            && !register.subfields.iter().any(|sub| sub.name == field)
+        {
+            self.push_diag(
+                diags,
+                "semantics.unknown-register-subfield",
+                format!(
+                    "register '{}::{}' has no subfield '{}'",
+                    space_name, register_name, field
+                ),
+                span,
+            );
         }
     }
 

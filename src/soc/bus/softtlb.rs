@@ -9,7 +9,7 @@ const MAX_WORD_BYTES: usize = 16;
 
 pub trait EndianWord: Copy {
     fn to_host(self, source_bigendian: MMUFlags) -> Self;
-    fn from_host(self, target_bigendian: MMUFlags) -> Self;
+    fn from_host(value: Self, target_bigendian: MMUFlags) -> Self;
 }
 
 macro_rules! impl_word {
@@ -24,10 +24,10 @@ macro_rules! impl_word {
             }
 
             #[inline(always)]
-            fn from_host(self, flags: MMUFlags) -> Self {
+            fn from_host(value: Self, flags: MMUFlags) -> Self {
                 match (flags.contains(MMUFlags::BIGENDIAN)) {
-                    true => Self::to_be(self),
-                    false => Self::to_le(self),
+                    true => Self::to_be(value),
+                    false => Self::to_le(value),
                 }
             }
         }
@@ -240,7 +240,7 @@ impl SoftTLB {
             unsafe {
                 // Calculate exact host address:
                 let host_ptr = vaddr.wrapping_add(entry.addend) as *mut T;
-                std::ptr::write_unaligned(host_ptr, value.from_host(entry.flags));
+                std::ptr::write_unaligned(host_ptr, T::from_host(value, entry.flags));
                 return Ok(());
             }
         }
@@ -264,7 +264,10 @@ impl SoftTLB {
         let word_len = std::mem::size_of::<T>();
         let slice = &mut buf[..word_len];
         unsafe {
-            std::ptr::write_unaligned(slice.as_mut_ptr() as *mut T, value.from_host(entry.flags));
+            std::ptr::write_unaligned(
+                slice.as_mut_ptr() as *mut T,
+                T::from_host(value, entry.flags),
+            );
         }
         let device_ref = entry
             .device

@@ -1,7 +1,6 @@
 use super::Validator;
 use crate::soc::isa::ast::{SpaceAttribute, SpaceDecl, SpaceKind};
 use crate::soc::isa::logic::LogicSpaceState;
-use crate::soc::isa::space::SpaceState;
 
 impl Validator {
     pub(super) fn validate_space(&mut self, space: &SpaceDecl) {
@@ -44,7 +43,7 @@ impl Validator {
         }
         self.space_states
             .entry(space.name.clone())
-            .or_insert_with(SpaceState::default);
+            .or_default();
     }
 }
 

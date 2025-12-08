@@ -25,6 +25,11 @@ impl RamMemory {
     }
 
     #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline(always)]
     pub fn ptr_at(&self, offset: usize) -> *const u8 {
         debug_assert!(offset < self.len);
         let bytes = self.bytes.lock().unwrap();

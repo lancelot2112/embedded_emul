@@ -22,6 +22,7 @@ impl SemanticProgram {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // Semantic AST mirrors source layout; boxing would complicate ownership
 pub enum SemanticStmt {
     Assign { target: AssignTarget, expr: Expr },
     Expr(Expr),
@@ -29,6 +30,7 @@ pub enum SemanticStmt {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)] // Variants intentionally inline to keep parsing simple
 pub enum AssignTarget {
     Variable(String),
     Tuple(Vec<String>),

@@ -128,7 +128,7 @@ impl SymbolReadable for PointerType {
         ctx: &mut ReadContext<'_, '_>,
     ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         ctx.data.goto(ctx.field_address)?;
-        let width = self.byte_size.max(ctx.size_hint.unwrap_or(self.byte_size)) as usize;
+        let width = self.byte_size.max(ctx.size_hint.unwrap_or(self.byte_size));
         if width > 8 {
             return Ok(None);
         }

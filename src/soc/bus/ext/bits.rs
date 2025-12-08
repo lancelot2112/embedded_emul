@@ -22,13 +22,13 @@ impl BitsCursorExt for BusCursor {
         }
         if bit_len > MAX_NATIVE_BYTES * 8 {
             return Err(BusError::UnsupportedWidth {
-                bytes: (bit_len + 7) / 8,
+                bytes: bit_len.div_ceil(8),
             });
         }
 
         let start = self.get_position();
         let total_bits = bit_offset as usize + bit_len;
-        let total_bytes = (total_bits + 7) / 8;
+        let total_bytes = total_bits.div_ceil(8);
         let word_bytes = select_word_bytes(total_bytes)?;
         let flags = self.flags_at(start)?;
         let shift = base_shift(bit_offset, total_bytes, word_bytes, flags);
@@ -44,13 +44,13 @@ impl BitsCursorExt for BusCursor {
         }
         if bit_len > MAX_NATIVE_BYTES * 8 {
             return Err(BusError::UnsupportedWidth {
-                bytes: (bit_len + 7) / 8,
+                bytes: bit_len.div_ceil(8),
             });
         }
 
         let start = self.get_position();
         let total_bits = bit_offset as usize + bit_len;
-        let total_bytes = (total_bits + 7) / 8;
+        let total_bytes = total_bits.div_ceil(8);
         let word_bytes = select_word_bytes(total_bytes)?;
         let flags = self.flags_at(start)?;
         let shift = base_shift(bit_offset, total_bytes, word_bytes, flags);
@@ -102,7 +102,7 @@ fn read_chunk(cursor: &mut BusCursor, address: usize, bytes: usize) -> BusResult
         2 => cursor.peek_at::<u16>(address)? as u128,
         4 => cursor.peek_at::<u32>(address)? as u128,
         8 => cursor.peek_at::<u64>(address)? as u128,
-        16 => cursor.peek_at::<u128>(address)? as u128,
+        16 => cursor.peek_at::<u128>(address)?,
         _ => return Err(BusError::UnsupportedWidth { bytes }),
     };
     Ok(value)
