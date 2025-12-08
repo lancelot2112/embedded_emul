@@ -43,11 +43,7 @@ impl<'machine> SemanticAnalyzer<'machine> {
         program: &SemanticProgram,
     ) -> Result<(), IsaError> {
         let operands = self.instruction_operands(instruction)?;
-        let params = self
-            .global_params
-            .iter()
-            .cloned()
-            .chain(operands);
+        let params = self.global_params.iter().cloned().chain(operands);
         let mut scope = AnalyzerScope::new(params);
         self.validate_program(program, &mut scope)
     }

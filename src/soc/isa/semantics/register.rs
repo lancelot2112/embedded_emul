@@ -121,7 +121,9 @@ impl<'machine> RegisterAccess<'machine> {
         evaluated_index: Option<i64>,
     ) -> Result<&'schema RegisterElement, IsaError> {
         if metadata.count <= 1 {
-            if let Some(index) = evaluated_index && index != 0 {
+            if let Some(index) = evaluated_index
+                && index != 0
+            {
                 return Err(IsaError::Machine(format!(
                     "register '{}' has a single element and cannot use index {index}",
                     register_name
@@ -434,7 +436,9 @@ fn resolve_reference_path(
     current_space: &str,
     reference: &ContextReference,
 ) -> (String, Vec<String>) {
-    if let Some(first) = reference.segments.first() && first.starts_with('$') {
+    if let Some(first) = reference.segments.first()
+        && first.starts_with('$')
+    {
         let space = first.trim_start_matches('$').to_string();
         let rest = reference.segments[1..].to_vec();
         return (space, rest);

@@ -593,8 +593,9 @@ impl BitFieldSpecBuilder {
     pub fn finish(mut self) -> BitFieldSpec {
         // If empty, default to a full-width slice
         if self.segments.is_empty() {
-            self.segments
-                .push(BitFieldSegment::Slice(BitSlice::new(0, self.storage.bit_size()).unwrap()));
+            self.segments.push(BitFieldSegment::Slice(
+                BitSlice::new(0, self.storage.bit_size()).unwrap(),
+            ));
         }
         let mut spec = BitFieldSpec {
             storage: self.storage,

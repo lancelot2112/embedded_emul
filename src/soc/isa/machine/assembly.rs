@@ -83,15 +83,12 @@ impl MachineDescription {
                 let field = form.subfield(name).ok_or_else(|| {
                     IsaError::Machine(format!("unknown operand '{name}' for '{}'", instr.name))
                 })?;
-                bits = field
-                    .spec
-                    .write_to(bits, *value as u64)
-                    .map_err(|err| {
-                        IsaError::Machine(format!(
-                            "failed to encode operand '{name}' on '{}': {err}",
-                            instr.name
-                        ))
-                    })?;
+                bits = field.spec.write_to(bits, *value as u64).map_err(|err| {
+                    IsaError::Machine(format!(
+                        "failed to encode operand '{name}' on '{}': {err}",
+                        instr.name
+                    ))
+                })?;
             }
         } else if !operands.is_empty() {
             return Err(IsaError::Machine(format!(

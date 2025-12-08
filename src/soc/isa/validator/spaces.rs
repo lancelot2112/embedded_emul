@@ -41,9 +41,7 @@ impl Validator {
                 Some(space.span.clone()),
             );
         }
-        self.space_states
-            .entry(space.name.clone())
-            .or_default();
+        self.space_states.entry(space.name.clone()).or_default();
     }
 }
 

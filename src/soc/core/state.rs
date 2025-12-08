@@ -168,11 +168,7 @@ impl From<std::io::Error> for StateError {
 // Pads the snapshot buffer so 64-bit chunked bus accesses never cross the
 // backing allocation.
 fn align_byte_len(len: usize) -> usize {
-    if len == 0 {
-        8
-    } else {
-        len.div_ceil(8) * 8
-    }
+    if len == 0 { 8 } else { len.div_ceil(8) * 8 }
 }
 
 fn narrow_bit_len(name: &str, bits: u32) -> StateResult<u16> {

@@ -96,12 +96,7 @@ impl ExecutionHarness<SoftwareHost> {
     ) -> Result<Self, HarnessError> {
         let mut loader = IsaLoader::new();
         let machine = loader.load_machine(definition)?;
-        Self::from_machine(
-            core_name,
-            machine,
-            endianness_override,
-            SoftwareHost,
-        )
+        Self::from_machine(core_name, machine, endianness_override, SoftwareHost)
     }
 }
 
