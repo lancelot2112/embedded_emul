@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn parameter_bindings_load_parameter_values() {
         let mut params = ParameterBindings::new();
-        let entries = vec![
+        let entries = [
             ("SIZE_MODE", ParameterValue::Number(64)),
             ("ENDIAN", ParameterValue::Word("big".into())),
         ];

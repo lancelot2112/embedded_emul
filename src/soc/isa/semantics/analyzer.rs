@@ -502,30 +502,31 @@ mod tests {
     fn specification(block: SemanticBlock) -> IsaSpecification {
         let path = PathBuf::from("test.isa");
         let span = SourceSpan::point(path.clone(), SourcePosition::new(1, 1));
-        let mut items = Vec::new();
-        items.push(IsaItem::Space(SpaceDecl {
-            name: "insn".into(),
-            kind: SpaceKind::Logic,
-            attributes: vec![
-                SpaceAttribute::WordSize(32),
-                SpaceAttribute::Endianness(Endianness::Little),
-            ],
-            span: span.clone(),
-            enable: None,
-        }));
-        items.push(IsaItem::Instruction(InstructionDecl {
-            space: "insn".into(),
-            form: None,
-            name: "noop".into(),
-            description: None,
-            operands: Vec::new(),
-            mask: None,
-            encoding: None,
-            semantics: Some(block),
-            display: None,
-            operator: None,
-            span,
-        }));
+        let items = vec![
+            IsaItem::Space(SpaceDecl {
+                name: "insn".into(),
+                kind: SpaceKind::Logic,
+                attributes: vec![
+                    SpaceAttribute::WordSize(32),
+                    SpaceAttribute::Endianness(Endianness::Little),
+                ],
+                span: span.clone(),
+                enable: None,
+            }),
+            IsaItem::Instruction(InstructionDecl {
+                space: "insn".into(),
+                form: None,
+                name: "noop".into(),
+                description: None,
+                operands: Vec::new(),
+                mask: None,
+                encoding: None,
+                semantics: Some(block),
+                display: None,
+                operator: None,
+                span,
+            }),
+        ];
         IsaSpecification::new(path, items)
     }
 }

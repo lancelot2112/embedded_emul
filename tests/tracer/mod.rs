@@ -167,7 +167,7 @@ fn format_trace(events: &[TraceEvent]) -> String {
 }
 
 fn format_trace_value(value: i64, bits: u32) -> String {
-    let width = std::cmp::max(1, ((bits as usize + 3) / 4) as usize);
+    let width = std::cmp::max(1, (bits as usize).div_ceil(4));
     let masked = if bits == 0 {
         0
     } else if bits >= 64 {

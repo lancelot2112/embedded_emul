@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn add_reports_carry_and_overflow() {
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let res = host.add(0x7FFF_FFFF, 0x7FFF_FFFF, false, 32);
         assert_eq!(res.value, 0xFFFF_FFFE);
         assert!(res.overflow);
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn sub_reports_borrow_and_overflow() {
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let res = host.sub(0, 1, false, 32);
         assert_eq!(res.value, 0xFFFF_FFFF);
         assert!(res.carry); // borrow flag
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn add_accepts_carry_in() {
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let res = host.add(0xFFFF_FFFF, 0, true, 32);
         assert_eq!(res.value, 0);
         assert!(res.carry);
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn mul_returns_high_bits() {
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let res = host.mul(0x1_0000_0000, 2, 64);
         assert_eq!(res.low, 0x2_0000_0000);
         assert_eq!(res.high, 0);

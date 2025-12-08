@@ -692,7 +692,7 @@ mod tests {
             statements: vec![SemanticStmt::Return(expr)],
         };
 
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let value = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -714,7 +714,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let result = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -743,7 +743,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let result = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -776,7 +776,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let result = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program");
@@ -804,7 +804,7 @@ mod tests {
 
         let mut params = HashMap::new();
         params.insert("idx".into(), SemanticValue::int(1));
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program");
@@ -824,7 +824,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let result = runtime.execute_program(&machine, &mut state, &mut host, &params, &program);
         assert!(result.is_err());
     }
@@ -855,7 +855,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let value = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -878,7 +878,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let value = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -911,7 +911,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let value = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -936,7 +936,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let value = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -959,7 +959,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let value = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect("execute program")
@@ -982,7 +982,7 @@ mod tests {
         };
 
         let params = HashMap::new();
-        let mut host = SoftwareHost::default();
+        let mut host = SoftwareHost;
         let err = runtime
             .execute_program(&machine, &mut state, &mut host, &params, &program)
             .expect_err("recursive macro should fail");
@@ -1001,107 +1001,103 @@ mod tests {
 
     fn build_machine() -> MachineDescription {
         let span = SourceSpan::point(PathBuf::from("test.isa"), SourcePosition::new(1, 1));
-        let mut items = Vec::new();
-        items.push(IsaItem::Parameter(ParameterDecl {
-            name: "SIZE_MODE".into(),
-            value: ParameterValue::Number(32),
-        }));
-        items.push(IsaItem::Space(SpaceDecl {
-            name: "reg".into(),
-            kind: SpaceKind::Register,
-            attributes: vec![
-                SpaceAttribute::WordSize(32),
-                SpaceAttribute::Endianness(Endianness::Little),
-            ],
-            span: span.clone(),
-            enable: None,
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "ACC".into(),
-                range: None,
-                offset: None,
-                size: Some(16),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: Vec::new(),
-                span: span.clone(),
-                display: None,
+        let mut items = vec![
+            IsaItem::Parameter(ParameterDecl {
+                name: "SIZE_MODE".into(),
+                value: ParameterValue::Number(32),
             }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "GPR".into(),
-                range: Some(FieldIndexRange { start: 0, end: 1 }),
-                offset: None,
-                size: Some(32),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: Vec::new(),
+            IsaItem::Space(SpaceDecl {
+                name: "reg".into(),
+                kind: SpaceKind::Register,
+                attributes: vec![
+                    SpaceAttribute::WordSize(32),
+                    SpaceAttribute::Endianness(Endianness::Little),
+                ],
                 span: span.clone(),
-                display: None,
+                enable: None,
             }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
+            IsaItem::SpaceMember(SpaceMemberDecl {
                 space: "reg".into(),
-                name: "FLAGS".into(),
-                range: None,
-                offset: None,
-                size: Some(8),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: vec![SubFieldDecl {
-                    name: "ZERO".into(),
-                    bit_spec: "@(0..1)".into(),
-                    operations: Vec::new(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "ACC".into(),
+                    range: None,
+                    offset: None,
+                    size: Some(16),
+                    reset: None,
                     description: None,
-                }],
-                span: span.clone(),
-                display: None,
-            }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "ALIAS".into(),
-                range: None,
-                offset: None,
-                size: Some(32),
-                reset: None,
-                description: None,
-                redirect: Some(ContextReference {
-                    segments: vec!["GPR0".into()],
+                    redirect: None,
+                    subfields: Vec::new(),
+                    span: span.clone(),
+                    display: None,
                 }),
-                subfields: Vec::new(),
-                span: span.clone(),
-                display: None,
             }),
-        }));
-
-        items.push(IsaItem::Space(SpaceDecl {
-            name: "insn".into(),
-            kind: SpaceKind::Logic,
-            attributes: vec![
-                SpaceAttribute::WordSize(32),
-                SpaceAttribute::Endianness(Endianness::Little),
-            ],
-            span: span.clone(),
-            enable: None,
-        }));
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "GPR".into(),
+                    range: Some(FieldIndexRange { start: 0, end: 1 }),
+                    offset: None,
+                    size: Some(32),
+                    reset: None,
+                    description: None,
+                    redirect: None,
+                    subfields: Vec::new(),
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "FLAGS".into(),
+                    range: None,
+                    offset: None,
+                    size: Some(8),
+                    reset: None,
+                    description: None,
+                    redirect: None,
+                    subfields: vec![SubFieldDecl {
+                        name: "ZERO".into(),
+                        bit_spec: "@(0..1)".into(),
+                        operations: Vec::new(),
+                        description: None,
+                    }],
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "ALIAS".into(),
+                    range: None,
+                    offset: None,
+                    size: Some(32),
+                    reset: None,
+                    description: None,
+                    redirect: Some(ContextReference {
+                        segments: vec!["GPR0".into()],
+                    }),
+                    subfields: Vec::new(),
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+            IsaItem::Space(SpaceDecl {
+                name: "insn".into(),
+                kind: SpaceKind::Logic,
+                attributes: vec![
+                    SpaceAttribute::WordSize(32),
+                    SpaceAttribute::Endianness(Endianness::Little),
+                ],
+                span: span.clone(),
+                enable: None,
+            }),
+        ];
 
         let mut inc_block = SemanticBlock::empty();
         inc_block.set_program(SemanticProgram {
@@ -1226,7 +1222,7 @@ mod tests {
             semantics: Some(call_size_block),
             display: None,
             operator: None,
-            span: span,
+            span,
         }));
 
         let spec = IsaSpecification::new(PathBuf::from("test.isa"), items);

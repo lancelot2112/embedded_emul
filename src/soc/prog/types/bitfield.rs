@@ -815,10 +815,6 @@ fn msb_range_to_lsb_offset(
 mod tests {
     use super::*;
 
-    fn dummy_storage(bytes: usize) -> ScalarStorage {
-        ScalarStorage::for_bytes(bytes)
-    }
-
     #[test]
     fn from_range_creates_single_segment() {
         let spec = BitFieldSpec::from_range(8, 4, 5);

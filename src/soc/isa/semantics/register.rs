@@ -674,158 +674,153 @@ mod tests {
 
     fn build_machine() -> MachineDescription {
         let span = SourceSpan::point(PathBuf::from("test.isa"), SourcePosition::new(1, 1));
-        let mut items = Vec::new();
-        items.push(IsaItem::Space(SpaceDecl {
-            name: "reg".into(),
-            kind: SpaceKind::Register,
-            attributes: vec![
-                SpaceAttribute::WordSize(32),
-                SpaceAttribute::Endianness(Endianness::Little),
-            ],
-            span: span.clone(),
-            enable: None,
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "ACC".into(),
-                range: None,
-                offset: None,
-                size: Some(16),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: Vec::new(),
-                span: span.clone(),
-                display: None,
-            }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "GPR".into(),
-                range: Some(FieldIndexRange { start: 0, end: 1 }),
-                offset: None,
-                size: Some(32),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: Vec::new(),
-                span: span.clone(),
-                display: None,
-            }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "FLAGS".into(),
-                range: None,
-                offset: None,
-                size: Some(8),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: vec![SubFieldDecl {
-                    name: "ZERO".into(),
-                    bit_spec: "@(0..1)".into(),
-                    operations: Vec::new(),
-                    description: None,
-                }],
-                span: span.clone(),
-                display: None,
-            }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
-                space: "reg".into(),
-                name: "CR".into(),
-                range: Some(FieldIndexRange { start: 0, end: 1 }),
-                offset: None,
-                size: Some(4),
-                reset: None,
-                description: None,
-                redirect: None,
-                subfields: vec![
-                    SubFieldDecl {
-                        name: "LT".into(),
-                        bit_spec: "@(0)".into(),
-                        operations: Vec::new(),
-                        description: Some("Less Than".into()),
-                    },
-                    SubFieldDecl {
-                        name: "NEG".into(),
-                        bit_spec: "@(0)".into(),
-                        operations: Vec::new(),
-                        description: Some("Negative".into()),
-                    },
-                    SubFieldDecl {
-                        name: "GT".into(),
-                        bit_spec: "@(1)".into(),
-                        operations: Vec::new(),
-                        description: Some("Greater Than".into()),
-                    },
-                    SubFieldDecl {
-                        name: "POS".into(),
-                        bit_spec: "@(1)".into(),
-                        operations: Vec::new(),
-                        description: Some("Positive".into()),
-                    },
-                    SubFieldDecl {
-                        name: "EQ".into(),
-                        bit_spec: "@(2)".into(),
-                        operations: Vec::new(),
-                        description: Some("Equal".into()),
-                    },
-                    SubFieldDecl {
-                        name: "ZERO".into(),
-                        bit_spec: "@(2)".into(),
-                        operations: Vec::new(),
-                        description: Some("Zero".into()),
-                    },
-                    SubFieldDecl {
-                        name: "SO".into(),
-                        bit_spec: "@(3)".into(),
-                        operations: Vec::new(),
-                        description: Some("Summary Overflow".into()),
-                    },
+        let items = vec![
+            IsaItem::Space(SpaceDecl {
+                name: "reg".into(),
+                kind: SpaceKind::Register,
+                attributes: vec![
+                    SpaceAttribute::WordSize(32),
+                    SpaceAttribute::Endianness(Endianness::Little),
                 ],
                 span: span.clone(),
-                display: None,
+                enable: None,
             }),
-        }));
-
-        items.push(IsaItem::SpaceMember(SpaceMemberDecl {
-            space: "reg".into(),
-            member: SpaceMember::Field(FieldDecl {
+            IsaItem::SpaceMember(SpaceMemberDecl {
                 space: "reg".into(),
-                name: "ALIAS".into(),
-                range: None,
-                offset: None,
-                size: Some(32),
-                reset: None,
-                description: None,
-                redirect: Some(ContextReference {
-                    segments: vec!["GPR0".into()],
-                }),
-                subfields: vec![SubFieldDecl {
-                    name: "LOW".into(),
-                    bit_spec: "@(0..15)".into(),
-                    operations: Vec::new(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "ACC".into(),
+                    range: None,
+                    offset: None,
+                    size: Some(16),
+                    reset: None,
                     description: None,
-                }],
-                span: span.clone(),
-                display: None,
+                    redirect: None,
+                    subfields: Vec::new(),
+                    span: span.clone(),
+                    display: None,
+                }),
             }),
-        }));
-
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "GPR".into(),
+                    range: Some(FieldIndexRange { start: 0, end: 1 }),
+                    offset: None,
+                    size: Some(32),
+                    reset: None,
+                    description: None,
+                    redirect: None,
+                    subfields: Vec::new(),
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "FLAGS".into(),
+                    range: None,
+                    offset: None,
+                    size: Some(8),
+                    reset: None,
+                    description: None,
+                    redirect: None,
+                    subfields: vec![SubFieldDecl {
+                        name: "ZERO".into(),
+                        bit_spec: "@(0..1)".into(),
+                        operations: Vec::new(),
+                        description: None,
+                    }],
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "CR".into(),
+                    range: Some(FieldIndexRange { start: 0, end: 1 }),
+                    offset: None,
+                    size: Some(4),
+                    reset: None,
+                    description: None,
+                    redirect: None,
+                    subfields: vec![
+                        SubFieldDecl {
+                            name: "LT".into(),
+                            bit_spec: "@(0)".into(),
+                            operations: Vec::new(),
+                            description: Some("Less Than".into()),
+                        },
+                        SubFieldDecl {
+                            name: "NEG".into(),
+                            bit_spec: "@(0)".into(),
+                            operations: Vec::new(),
+                            description: Some("Negative".into()),
+                        },
+                        SubFieldDecl {
+                            name: "GT".into(),
+                            bit_spec: "@(1)".into(),
+                            operations: Vec::new(),
+                            description: Some("Greater Than".into()),
+                        },
+                        SubFieldDecl {
+                            name: "POS".into(),
+                            bit_spec: "@(1)".into(),
+                            operations: Vec::new(),
+                            description: Some("Positive".into()),
+                        },
+                        SubFieldDecl {
+                            name: "EQ".into(),
+                            bit_spec: "@(2)".into(),
+                            operations: Vec::new(),
+                            description: Some("Equal".into()),
+                        },
+                        SubFieldDecl {
+                            name: "ZERO".into(),
+                            bit_spec: "@(2)".into(),
+                            operations: Vec::new(),
+                            description: Some("Zero".into()),
+                        },
+                        SubFieldDecl {
+                            name: "SO".into(),
+                            bit_spec: "@(3)".into(),
+                            operations: Vec::new(),
+                            description: Some("Summary Overflow".into()),
+                        },
+                    ],
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+            IsaItem::SpaceMember(SpaceMemberDecl {
+                space: "reg".into(),
+                member: SpaceMember::Field(FieldDecl {
+                    space: "reg".into(),
+                    name: "ALIAS".into(),
+                    range: None,
+                    offset: None,
+                    size: Some(32),
+                    reset: None,
+                    description: None,
+                    redirect: Some(ContextReference {
+                        segments: vec!["GPR0".into()],
+                    }),
+                    subfields: vec![SubFieldDecl {
+                        name: "LOW".into(),
+                        bit_spec: "@(0..15)".into(),
+                        operations: Vec::new(),
+                        description: None,
+                    }],
+                    span: span.clone(),
+                    display: None,
+                }),
+            }),
+        ];
         let spec = IsaSpecification::new(PathBuf::from("test.isa"), items);
         MachineDescription::from_documents(vec![spec]).expect("machine description")
     }
