@@ -3,23 +3,24 @@
 use crate::soc::bus::BusError;
 use crate::soc::prog::symbols::walker::{SymbolWalkEntry, SymbolWalker, ValueKind};
 use crate::soc::prog::types::arena::TypeArena;
+use crate::soc::prog::types::arena_record::TypeRecord;
 
-use super::handle::{Snapshot, SymbolHandle};
+use super::handle::{Snapshot, SymbolBus};
 use super::read::{ReadContext, read_type_record};
 use super::value::{SymbolAccessError, SymbolValue};
 
 /// Streaming view that materialises values discovered by the `SymbolWalker` and exposes typed
 /// reads/writes at each primitive leaf.
 pub struct SymbolValueCursor<'handle, 'arena> {
-    pub(super) handle: &'handle mut SymbolHandle<'arena>,
+    pub(super) handle: &'handle mut SymbolBus<'arena>,
     pub(super) snapshot: Snapshot,
     pub(super) walker: SymbolWalker<'arena>,
     pub(super) arena: &'arena TypeArena,
 }
 
-pub struct SymbolWalkRead<'val> {
+pub struct SymbolWalkRead {
     pub entry: SymbolWalkEntry,
-    pub value: SymbolValue<'val>,
+    pub value: SymbolValue,
     pub address: usize,
 }
 
@@ -28,23 +29,12 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
     pub fn try_next(&mut self) -> Result<Option<SymbolWalkRead>, SymbolAccessError> {
         for entry in &mut self.walker {
             if entry.offset_bits % 8 != 0 {
-                let is_bitfield = matches!(
-                    self.arena.get(entry.ty),
-                    crate::soc::prog::types::record::TypeRecord::BitField(_)
-                );
+                let is_bitfield = matches!(self.arena.get(entry.ty), TypeRecord::BitField(_));
                 if !is_bitfield {
                     continue;
                 }
             }
-            let mut address = self.snapshot.address + (entry.offset_bits / 8);
-            if let crate::soc::prog::types::record::TypeRecord::BitField(bitfield) =
-                self.arena.get(entry.ty)
-            {
-                if let Some((min_offset, _)) = bitfield.bit_span() {
-                    let total_bits = entry.offset_bits + min_offset as usize;
-                    address = self.snapshot.address + (total_bits / 8);
-                }
-            }
+            let address = self.snapshot.address + (entry.offset_bits / 8);
             let value = self.read_entry_value(&entry, address)?;
             return Ok(Some(SymbolWalkRead {
                 entry,
@@ -78,8 +68,14 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
                     .to_string(),
             });
         };
-        self.handle
-            .interpret_type_at(self.arena, target, address as usize, None)
+        let arena = self.handle.table.type_arena();
+        SymbolBus::interpret_type_at(
+            &mut self.handle.cursor,
+            arena.as_ref(),
+            target,
+            address as usize,
+            None,
+        )
     }
 
     /// Writes a raw byte slice into the location described by the walk entry.
@@ -108,22 +104,21 @@ impl<'handle, 'arena> SymbolValueCursor<'handle, 'arena> {
         entry: &SymbolWalkEntry,
         address: usize,
     ) -> Result<SymbolValue, SymbolAccessError> {
-        let record = self.arena.get(entry.ty);
-        let mut ctx = ReadContext::new(
-            &mut self.handle.cursor,
-            self.arena,
-            Some(entry),
-            address,
-            self.snapshot.address,
-            Some(entry.byte_len()),
-        );
-        if let Some(value) = read_type_record(record, &mut ctx)? {
-            Ok(value)
-        } else {
-            Err(SymbolAccessError::UnsupportedTraversal {
-                label: self.symbol_label(),
-            })
+        let label = self.symbol_label();
+        {
+            let record = self.arena.get(entry.ty);
+            let mut ctx = ReadContext::new(
+                &mut self.handle.cursor,
+                self.arena,
+                address,
+                Some(entry.byte_len()),
+                (entry.offset_bits % 8) as u8,
+            );
+            if let Some(value) = read_type_record(record, &mut ctx)? {
+                return Ok(value);
+            }
         }
+        Err(SymbolAccessError::UnsupportedTraversal { label })
     }
 
     fn symbol_label(&self) -> String {

@@ -1,57 +1,54 @@
 //! Shared utilities for decoding symbol-backed type records into high-level values.
 
 use crate::soc::bus::BusCursor;
-use crate::soc::bus::ext::{BitsCursorExt, FloatCursorExt, SignedCursorExt, StringCursorExt};
-use crate::soc::prog::symbols::walker::SymbolWalkEntry;
+use crate::soc::bus::ext::{BitsCursorExt, FloatCursorExt, StringCursorExt};
 use crate::soc::prog::types::arena::TypeArena;
+use crate::soc::prog::types::arena_record::TypeRecord;
 use crate::soc::prog::types::bitfield::BitFieldSpec;
+use crate::soc::prog::types::enum_scalar::EnumType;
 use crate::soc::prog::types::pointer::PointerType;
-use crate::soc::prog::types::record::TypeRecord;
-use crate::soc::prog::types::scalar::{EnumType, FixedScalar, ScalarEncoding, ScalarType};
+use crate::soc::prog::types::scalar::{FixedScalar, ScalarEncoding, ScalarType};
 
 use super::value::{SymbolAccessError, SymbolValue};
 
 pub struct ReadContext<'ctx, 'arena> {
     pub data: &'ctx mut BusCursor,
     pub arena: &'arena TypeArena,
-    pub entry: Option<&'ctx SymbolWalkEntry>,
     pub field_address: usize,
-    pub symbol_base: usize,
     pub size_hint: Option<usize>,
+    pub bit_offset: u8,
 }
 
 impl<'ctx, 'arena> ReadContext<'ctx, 'arena> {
     pub fn new(
         data: &'ctx mut BusCursor,
         arena: &'arena TypeArena,
-        entry: Option<&'ctx SymbolWalkEntry>,
         field_address: usize,
-        symbol_base: usize,
         size_hint: Option<usize>,
+        bit_offset: u8,
     ) -> Self {
         Self {
             data,
             arena,
-            entry,
             field_address,
-            symbol_base,
             size_hint,
+            bit_offset,
         }
     }
 }
 
 pub trait SymbolReadable {
-    fn read_symbol_value<'ctx>(
+    fn read_symbol_value(
         &self,
-        ctx: &mut ReadContext<'ctx, '_>,
-    ) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError>;
+        ctx: &mut ReadContext<'_, '_>,
+    ) -> Result<Option<SymbolValue>, SymbolAccessError>;
 }
 
 impl SymbolReadable for ScalarType {
-    fn read_symbol_value<'ctx>(
+    fn read_symbol_value(
         &self,
-        ctx: &mut ReadContext<'ctx, '_>,
-    ) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError> {
+        ctx: &mut ReadContext<'_, '_>,
+    ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         ctx.data.goto(ctx.field_address)?;
         let value = match self.encoding {
             ScalarEncoding::Unsigned => {
@@ -92,10 +89,10 @@ impl SymbolReadable for ScalarType {
 }
 
 impl SymbolReadable for EnumType {
-    fn read_symbol_value<'ctx>(
+    fn read_symbol_value(
         &self,
-        ctx: &mut ReadContext<'ctx, '_>,
-    ) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError> {
+        ctx: &mut ReadContext<'_, '_>,
+    ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         ctx.data.goto(ctx.field_address)?;
         if self.base.bit_size > 64 {
             return Ok(None);
@@ -109,10 +106,10 @@ impl SymbolReadable for EnumType {
 }
 
 impl SymbolReadable for FixedScalar {
-    fn read_symbol_value<'ctx>(
+    fn read_symbol_value(
         &self,
-        ctx: &mut ReadContext<'ctx, '_>,
-    ) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError> {
+        ctx: &mut ReadContext<'_, '_>,
+    ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         ctx.data.goto(ctx.field_address)?;
         if self.base.bit_size == 0 {
             return Ok(Some(SymbolValue::Float(self.apply(0))));
@@ -126,10 +123,10 @@ impl SymbolReadable for FixedScalar {
 }
 
 impl SymbolReadable for PointerType {
-    fn read_symbol_value<'ctx>(
+    fn read_symbol_value(
         &self,
-        ctx: &mut ReadContext<'ctx, '_>,
-    ) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError> {
+        ctx: &mut ReadContext<'_, '_>,
+    ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         ctx.data.goto(ctx.field_address)?;
         let width = self.byte_size.max(ctx.size_hint.unwrap_or(self.byte_size)) as usize;
         if width > 8 {
@@ -145,10 +142,10 @@ impl SymbolReadable for PointerType {
 }
 
 impl SymbolReadable for BitFieldSpec {
-    fn read_symbol_value<'ctx>(
+    fn read_symbol_value(
         &self,
-        ctx: &mut ReadContext<'ctx, '_>,
-    ) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError> {
+        ctx: &mut ReadContext<'_, '_>,
+    ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         let width = self.total_width();
         if width == 0 {
             return Ok(Some(SymbolValue::Unsigned(0)));
@@ -159,7 +156,12 @@ impl SymbolReadable for BitFieldSpec {
             });
         }
         ctx.data.goto(ctx.field_address)?;
-        
+        let bit_count = self.storage_bits() as usize;
+        let container_bits = if bit_count == 0 {
+            0
+        } else {
+            ctx.data.read_bits(ctx.bit_offset, bit_count)? as u64
+        };
         let (raw_value, actual_width) = self.read_bits(container_bits);
         debug_assert_eq!(self.total_width(), actual_width);
         let value = if self.is_signed() {
@@ -173,16 +175,16 @@ impl SymbolReadable for BitFieldSpec {
     }
 }
 
-pub fn read_type_record<'ctx>(
+pub fn read_type_record(
     record: &TypeRecord,
-    ctx: &mut ReadContext<'ctx, '_>,
-) -> Result<Option<SymbolValue<'ctx>>, SymbolAccessError> {
+    ctx: &mut ReadContext<'_, '_>,
+) -> Result<Option<SymbolValue>, SymbolAccessError> {
     match record {
         TypeRecord::Scalar(scalar) => scalar.read_symbol_value(ctx),
         TypeRecord::Enum(enum_type) => enum_type.read_symbol_value(ctx),
         TypeRecord::Fixed(fixed) => fixed.read_symbol_value(ctx),
         TypeRecord::Pointer(pointer) => pointer.read_symbol_value(ctx),
-        TypeRecord::BitField(bitfield) => bitfield.read_symbol_value(ctx),
+        TypeRecord::BitField(fields) => fields.read_symbol_value(ctx),
         _ => Ok(None),
     }
 }

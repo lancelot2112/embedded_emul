@@ -22,6 +22,12 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AddressMode {
+    Physical,
+    Effective,
+}
+
 #[derive(Clone)]
 pub struct MMUEntry {
     pub vaddr: VirtAddr,
@@ -35,13 +41,19 @@ pub struct MMUEntry {
 pub struct SoftMMU {
     regions: BTreeMap<VirtAddr, MMUEntry>,
     bus: Arc<DeviceBus>,
+    mode: AddressMode,
 }
 
 impl SoftMMU {
     pub fn new(bus: Arc<DeviceBus>) -> Self {
+        Self::with_mode(bus, AddressMode::Effective)
+    }
+
+    pub fn with_mode(bus: Arc<DeviceBus>, mode: AddressMode) -> Self {
         Self {
             regions: BTreeMap::new(),
             bus,
+            mode,
         }
     }
 
@@ -82,17 +94,7 @@ impl SoftMMU {
         validate_physical_span(paddr, size, &phys_range)?;
         let device_offset = phys_range.device_offset + (paddr - phys_range.bus_start);
 
-        // Set endian or ram flags depending on device settings
-        let mut flags = flags;
-        match device.endianness() {
-            Endianness::Big => flags |= MMUFlags::BIGENDIAN,
-            _ => flags.remove(MMUFlags::BIGENDIAN),
-        }
-        if let Some(_) = device.as_ram() {
-            flags |= MMUFlags::RAM;
-        } else {
-            flags.remove(MMUFlags::RAM);
-        }
+        let flags = Self::flags_for_device_flags(&device, flags | MMUFlags::VALID);
 
         self.regions.insert(
             vaddr,
@@ -117,6 +119,37 @@ impl SoftMMU {
 
     // Translate a virtual address into an addend, flags, and a device ref
     pub fn translate(&self, vaddr: VirtAddr) -> BusResult<(usize, MMUFlags, DeviceRef)> {
+        match self.mode {
+            AddressMode::Physical => self.translate_physical(vaddr),
+            AddressMode::Effective => self.translate_effective(vaddr),
+        }
+    }
+
+    pub fn set_mode(&mut self, mode: AddressMode) {
+        self.mode = mode;
+    }
+
+    pub fn mode(&self) -> AddressMode {
+        self.mode
+    }
+
+    fn translate_physical(&self, addr: VirtAddr) -> BusResult<(usize, MMUFlags, DeviceRef)> {
+        let (device, phys_range) = self.bus.resolve_device_at(addr)?;
+        let device_offset = phys_range.device_offset + (addr - phys_range.bus_start);
+        let mut flags = Self::flags_for_device_flags(
+            &device,
+            MMUFlags::VALID | MMUFlags::READ | MMUFlags::WRITE | MMUFlags::EXEC,
+        );
+        if let Some(ram) = device.as_ram() {
+            let host_ptr = ram.ptr_at(device_offset) as usize;
+            let addend = host_ptr.wrapping_sub(addr);
+            return Ok((addend, flags, device));
+        }
+        let addend = device_offset.wrapping_sub(addr);
+        Ok((addend, flags, device))
+    }
+
+    fn translate_effective(&self, vaddr: VirtAddr) -> BusResult<(usize, MMUFlags, DeviceRef)> {
         let entry = self
             .regions
             .range(..=vaddr)
@@ -140,15 +173,16 @@ impl SoftMMU {
         let offset = vaddr - entry.vaddr;
         let device_offset = entry.device_offset + offset;
         let device = entry.device.clone();
+        let mut flags = entry.flags | MMUFlags::VALID;
+        flags = Self::flags_for_device_flags(&device, flags);
 
-        // Check if this is ram
         if let Some(ram) = device.as_ram() {
             let host_ptr = ram.ptr_at(device_offset) as usize;
             let addend = host_ptr.wrapping_sub(vaddr);
-            return Ok((addend, entry.flags, device));
+            return Ok((addend, flags, device));
         }
         let addend = device_offset.wrapping_sub(vaddr);
-        Ok((addend, entry.flags, device))
+        Ok((addend, flags, device))
     }
 
     fn overlaps(&self, start: VirtAddr, end: VirtAddr) -> bool {
@@ -158,6 +192,19 @@ impl SoftMMU {
             }
         }
         self.regions.range(start..end).next().is_some()
+    }
+
+    fn flags_for_device_flags(device: &DeviceRef, mut flags: MMUFlags) -> MMUFlags {
+        match device.endianness() {
+            Endianness::Big => flags |= MMUFlags::BIGENDIAN,
+            _ => flags.remove(MMUFlags::BIGENDIAN),
+        }
+        if device.as_ram().is_some() {
+            flags |= MMUFlags::RAM;
+        } else {
+            flags.remove(MMUFlags::RAM);
+        }
+        flags
     }
 }
 
@@ -189,20 +236,22 @@ mod tests {
     fn virtual_mapping_resolves_into_ram_entry() {
         let mut bus = DeviceBus::new(32);
         let ram = RamMemory::new("ram", 0x2000, Endianness::Little);
+        let expected_ptr = ram.ptr_at(0x1880 - 0x1000) as usize;
         bus.map_device(ram, 0x1000, 0).unwrap();
         let bus = Arc::new(bus);
         let mut mmu = SoftMMU::new(bus);
         mmu.map_region(0x8000, 0x1800, 0x100, MMUFlags::READ)
             .expect("map virtual region");
 
-        let (addend, flags, device) = mmu.translate(0x8080).expect("translate within range");
+        let (addend, flags, _device) = mmu.translate(0x8080).expect("translate within range");
         assert!(
             flags.contains(MMUFlags::RAM),
             "ram-backed mappings should set the RAM flag"
         );
-        assert!(
-            0x8080usize.wrapping_add(addend) == 0x1880usize,
-            "translated address should map to physical RAM"
+        assert_eq!(
+            0x8080usize.wrapping_add(addend),
+            expected_ptr,
+            "translated address should map to backing RAM"
         )
     }
 }

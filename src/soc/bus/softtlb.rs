@@ -1,14 +1,11 @@
-use std::sync::Arc;
-
 use crate::soc::bus::{
     BusError, BusResult, DeviceRef,
-    softmmu::{MMUFlags, SoftMMU},
+    softmmu::{AddressMode, MMUFlags, SoftMMU},
 };
 use crate::soc::device::AccessContext;
 
 const TLB_SETS: usize = 256;
 const MAX_WORD_BYTES: usize = 16;
-const VIRT_PAGE_MASK: usize = !0xFFF;
 
 pub trait EndianWord: Copy {
     fn to_host(self, source_bigendian: MMUFlags) -> Self;
@@ -75,17 +72,28 @@ impl TLBEntry {
 
 pub struct SoftTLB {
     tlb: Vec<TLBEntry>,
-    mmu: Arc<SoftMMU>,
+    mmu: SoftMMU,
     context: AccessContext,
 }
 
 impl SoftTLB {
-    pub fn new(mmu: Arc<SoftMMU>, context: AccessContext) -> Self {
+    pub fn new(mmu: SoftMMU, context: AccessContext) -> Self {
         Self {
             tlb: vec![TLBEntry::default(); TLB_SETS],
             mmu,
             context,
         }
+    }
+
+    pub fn set_address_mode(&mut self, mode: AddressMode) {
+        if self.mmu.mode() != mode {
+            self.mmu.set_mode(mode);
+            self.invalidate_all();
+        }
+    }
+
+    pub fn address_mode(&self) -> AddressMode {
+        self.mmu.mode()
     }
 
     #[inline(always)]
@@ -265,5 +273,11 @@ impl SoftTLB {
         let offset = vaddr.wrapping_add(entry.addend);
         device_ref.write(offset, slice, context)?;
         Ok(())
+    }
+
+    fn invalidate_all(&mut self) {
+        for entry in &mut self.tlb {
+            *entry = TLBEntry::default();
+        }
     }
 }

@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 
 use ahash::AHashMap;
 
-use super::record::{MemberRecord, MemberSpan, TypeRecord};
+use super::arena_record::{ArenaSpan, FieldRecord, MemberRecord, TypeRecord};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TypeId(NonZeroU32);
@@ -62,6 +62,7 @@ impl StringPool {
 pub struct TypeArena {
     records: Vec<TypeRecord>,
     members: Vec<MemberRecord>,
+    fields: Vec<FieldRecord>,
     strings: StringPool,
 }
 
@@ -83,19 +84,39 @@ impl TypeArena {
         &mut self.records[id.index()]
     }
 
-    pub fn alloc_members<I>(&mut self, members: I) -> MemberSpan
+    pub fn alloc_members<I>(&mut self, members: I) -> ArenaSpan
     where
         I: IntoIterator<Item = MemberRecord>,
     {
         let start = self.members.len();
         self.members.extend(members);
-        MemberSpan::new(start, self.members.len() - start)
+        ArenaSpan::new(start, self.members.len() - start)
     }
 
-    pub fn members(&self, span: MemberSpan) -> &[MemberRecord] {
+    pub fn members(&self, span: ArenaSpan) -> &[MemberRecord] {
         let start = span.start();
         let end = start + span.len();
         &self.members[start..end]
+    }
+
+    pub fn alloc_fields<I>(&mut self, fields: I) -> ArenaSpan
+    where
+        I: IntoIterator<Item = FieldRecord>,
+    {
+        let start = self.fields.len();
+        self.fields.extend(fields);
+        let len = self.fields.len() - start;
+        if len == 0 {
+            ArenaSpan::empty()
+        } else {
+            ArenaSpan::new(start, len)
+        }
+    }
+
+    pub fn fields(&self, span: ArenaSpan) -> &[FieldRecord] {
+        let start = span.start();
+        let end = start + span.len();
+        &self.fields[start..end]
     }
 
     pub fn intern_string<S: AsRef<str>>(&mut self, value: S) -> StringId {
@@ -111,6 +132,7 @@ impl TypeArena {
 mod tests {
     //! Basic coverage for arena bookkeeping and string interning layers.
     use super::*;
+    use crate::soc::prog::types::bitfield::BitFieldSpec;
     use crate::soc::prog::types::scalar::{DisplayFormat, ScalarEncoding, ScalarType};
 
     #[test]
@@ -137,5 +159,19 @@ mod tests {
             "status",
             "Resolved string should match original token"
         );
+    }
+
+    #[test]
+    fn allocating_fields_returns_span() {
+        // ensure fields land in their own dense side table
+        let mut arena = TypeArena::new();
+        let spec = BitFieldSpec::from_range(32, 0, 8);
+        let field_ty = arena.push_record(TypeRecord::BitField(spec));
+        let label = arena.intern_string("bits");
+        let span = arena.alloc_fields([FieldRecord::new(label, field_ty)]);
+        assert_eq!(span.len(), 1, "field span should report inserted length");
+        let slice = arena.fields(span);
+        assert_eq!(slice.len(), 1, "slice should expose stored field");
+        assert_eq!(slice[0].name_id, label, "field label should match");
     }
 }

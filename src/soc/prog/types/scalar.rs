@@ -1,7 +1,5 @@
 //! Scalar, enumeration, and bitfield helpers derived from the .NET implementation.
 
-use smallvec::SmallVec;
-
 use crate::soc::{
     bus::{BusCursor, BusResult},
     prog::types::TypeRecord,
@@ -142,38 +140,6 @@ fn format_dot_notation(value: u64, byte_size: usize) -> String {
         .join(".")
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EnumVariant {
-    pub label: StringId,
-    pub value: i64,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct EnumType {
-    pub base: ScalarType,
-    pub variants: SmallVec<[EnumVariant; 4]>,
-}
-
-impl EnumType {
-    pub fn new(base: ScalarType) -> Self {
-        Self {
-            base,
-            variants: SmallVec::new(),
-        }
-    }
-
-    pub fn push_variant(&mut self, variant: EnumVariant) {
-        self.variants.push(variant);
-    }
-
-    pub fn label_for(&self, value: i64) -> Option<StringId> {
-        self.variants
-            .iter()
-            .find(|entry| entry.value == value)
-            .map(|entry| entry.label)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct FixedScalar {
     pub base: ScalarType,
@@ -272,7 +238,6 @@ impl ScalarStorage {
 mod tests {
     //! Validates scalar helpers behave deterministically for debugging scenarios.
     use super::*;
-    use crate::soc::prog::types::arena::TypeArena;
 
     #[test]
     fn scalar_formatting_respects_hex_display() {
@@ -282,21 +247,6 @@ mod tests {
         assert_eq!(
             rendered, "0x00000034",
             "hex formatting must include byte padding"
-        );
-    }
-
-    #[test]
-    fn enum_lookup_resolves_label() {
-        // confirm that label_for performs value-based search
-        let mut arena = TypeArena::new();
-        let label = arena.intern_string("Ready");
-        let base = ScalarType::new(None, 1, ScalarEncoding::Unsigned, DisplayFormat::Default);
-        let mut enum_type = EnumType::new(base);
-        enum_type.push_variant(EnumVariant { label, value: 1 });
-        assert_eq!(
-            enum_type.label_for(1),
-            Some(label),
-            "value lookup should return first matching label"
         );
     }
 }

@@ -152,10 +152,7 @@ mod tests {
         let mut cursor = make_cursor(&data, DeviceEndianness::Big);
         cursor.goto(0).unwrap();
         let value = cursor.read_bits(0, 24).expect("read 24 bits");
-        assert_eq!(
-            value, 0x012345,
-            "upper bytes should retain big-endian order"
-        );
+        assert_eq!(value, 0x123456, "upper bytes retain big-endian order");
         assert_eq!(
             cursor.get_position(),
             3,

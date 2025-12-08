@@ -1,7 +1,7 @@
 //! Register metadata helpers for the machine module. Defines register binding
 //! declarations, formatting helpers, and register-space utilities.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -13,11 +13,7 @@ use crate::soc::isa::ast::{
 };
 use crate::soc::isa::error::IsaError;
 use crate::soc::prog::symbols::{StorageClass, SymbolHandle, SymbolKind, SymbolTable};
-use crate::soc::prog::types::record::{LayoutSize, MemberRecord};
-use crate::soc::prog::types::{
-    AggregateKind, BitFieldSpec, DisplayFormat, ScalarEncoding, TypeArena,
-    TypeBuilder, TypeId,
-};
+use crate::soc::prog::types::{BitFieldSpec, TypeArena, TypeBuilder, TypeId};
 
 use super::space::SpaceInfo;
 use crate::soc::isa::space::resolve_reference_path;
@@ -282,7 +278,13 @@ pub struct RegisterElement {
 #[derive(Debug, Clone)]
 pub struct RegisterFieldMetadata {
     pub name: String,
-    pub ty: TypeId,
+    pub handle: ScalarFieldHandle,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ScalarFieldHandle {
+    pub owner: TypeId,
+    pub field_index: u16,
 }
 
 impl RegisterSchema {
@@ -300,7 +302,6 @@ impl RegisterSchema {
     pub fn build(spaces: &mut BTreeMap<String, SpaceInfo>) -> Result<Self, IsaError> {
         let mut arena = TypeArena::new();
         let mut builder = TypeBuilder::new(&mut arena);
-        let mut scalar_cache: HashMap<u32, TypeId> = HashMap::new();
         let mut pending: Vec<PendingRegister> = Vec::new();
         let mut alias_fields: BTreeMap<RegisterKey, Vec<RegisterFieldMetadata>> = BTreeMap::new();
 
@@ -315,7 +316,6 @@ impl RegisterSchema {
                 }
                 let entry = build_register_entry(
                     &mut builder,
-                    &mut scalar_cache,
                     space_name,
                     space.endianness,
                     default_bits,
@@ -338,14 +338,8 @@ impl RegisterSchema {
                     if info.subfields.is_empty() {
                         continue;
                     }
-                    let fields = build_alias_fields(
-                        &mut builder,
-                        &mut scalar_cache,
-                        spaces,
-                        space_name,
-                        reference,
-                        info,
-                    )?;
+                    let fields =
+                        build_alias_fields(&mut builder, spaces, space_name, reference, info)?;
                     alias_fields.insert(RegisterKey::new(space_name, &info.name), fields);
                 }
             }
@@ -487,7 +481,6 @@ impl PendingRegister {
 
 fn build_register_entry(
     builder: &mut TypeBuilder<'_>,
-    scalar_cache: &mut HashMap<u32, TypeId>,
     space_name: &str,
     byte_order: Endianness,
     default_bits: u32,
@@ -506,26 +499,7 @@ fn build_register_entry(
             space_name, info.name, store_bitw, MAX_REGISTER_BITS
         )));
     }
-    let _container = *scalar_cache.entry(store_bitw).or_insert_with(|| {
-        builder.scalar(
-            None,
-            element_bytes(store_bitw as usize),
-            ScalarEncoding::Unsigned,
-            DisplayFormat::Hex,
-        )
-    });
-    let (fields, members) = build_register_fields(builder, store_bitw, space_name, info)?;
-    let layout = LayoutSize {
-        bytes: (store_bitw / 8) as usize,
-        trailing_bits: (store_bitw % 8) as usize,
-    };
-    let mut aggregate = builder
-        .aggregate(AggregateKind::Struct)
-        .layout(layout.bytes, layout.trailing_bits);
-    for record in members {
-        aggregate = aggregate.member_record(record);
-    }
-    let structure = aggregate.finish();
+    let (fields, structure) = build_register_fields(builder, store_bitw, space_name, info)?;
     let count = register_count(info);
     let stride_bytes = element_bytes(store_bitw as usize);
     let array = builder.sequence_static(structure, stride_bytes, count as usize);
@@ -546,7 +520,6 @@ fn build_register_entry(
 
 fn build_alias_fields(
     builder: &mut TypeBuilder<'_>,
-    scalar_cache: &mut HashMap<u32, TypeId>,
     spaces: &BTreeMap<String, SpaceInfo>,
     alias_space: &str,
     reference: &ContextReference,
@@ -569,30 +542,13 @@ fn build_alias_fields(
         )));
     }
     let store_bitw = resolve_register_bit_width(spaces, &target_space, target_name)?;
-    let _container = *scalar_cache.entry(store_bitw).or_insert_with(|| {
-        builder.scalar(
-            None,
-            element_bytes(store_bitw as usize),
-            ScalarEncoding::Unsigned,
-            DisplayFormat::Hex,
-        )
-    });
-    let mut fields = Vec::new();
-    for sub in &alias_info.subfields {
-        let spec = BitFieldSpec::from_spec_str(store_bitw as u16, &sub.bit_spec).map_err(
-            |err| {
-                IsaError::Machine(format!(
-                    "invalid bit spec '{}' on alias '{}::{}::{}': {err}",
-                    sub.bit_spec, alias_space, alias_info.name, sub.name
-                ))
-            },
-        )?;
-        let ty = builder.bitfield(spec);
-        fields.push(RegisterFieldMetadata {
-            name: sub.name.clone(),
-            ty,
-        });
-    }
+    let entries = collect_subfield_specs(
+        store_bitw,
+        alias_space,
+        &alias_info.name,
+        &alias_info.subfields,
+    )?;
+    let (fields, _) = finish_scalar_fields(builder, store_bitw, entries);
     Ok(fields)
 }
 
@@ -638,43 +594,16 @@ fn build_register_fields(
     store_bitw: u32,
     space: &str,
     info: &RegisterInfo,
-) -> Result<(Vec<RegisterFieldMetadata>, Vec<MemberRecord>), IsaError> {
-    let mut fields = Vec::new();
-    let mut members = Vec::new();
-    if info.subfields.is_empty() {
-        let spec = BitFieldSpec::builder(store_bitw as u16).finish();
-        let width = spec.data_width();
-        let name_id = Some(builder.intern("VALUE"));
-        let ty = builder.bitfield(spec);
-        let record = MemberRecord::new(name_id, ty, 0).with_bitfield(width as u16);
-        fields.push(RegisterFieldMetadata {
-            name: "VALUE".into(),
-            ty,
-        });
-        members.push(record);
-        return Ok((fields, members));
-    }
-    for sub in &info.subfields {
-        let spec = BitFieldSpec::from_spec_str(store_bitw as u16, &sub.bit_spec).map_err(
-            |err| {
-                IsaError::Machine(format!(
-                    "invalid bit spec '{}' on register '{}::{}::{}': {err}",
-                    sub.bit_spec, space, info.name, sub.name
-                ))
-            },
-        )?;
-        let width = spec.data_width();
-        let offset = spec.bit_span().map(|(start, _)| start as u32).unwrap_or(0);
-        let name_id = Some(builder.intern(&sub.name));
-        let ty = builder.bitfield(spec);
-        let record = MemberRecord::new(name_id, ty, offset as usize).with_bitfield(width as u16);
-        fields.push(RegisterFieldMetadata {
-            name: sub.name.clone(),
-            ty,
-        });
-        members.push(record);
-    }
-    Ok((fields, members))
+) -> Result<(Vec<RegisterFieldMetadata>, TypeId), IsaError> {
+    let entries = if info.subfields.is_empty() {
+        vec![(
+            "VALUE".into(),
+            BitFieldSpec::builder(store_bitw as u16).finish(),
+        )]
+    } else {
+        collect_subfield_specs(store_bitw, space, &info.name, &info.subfields)?
+    };
+    Ok(finish_scalar_fields(builder, store_bitw, entries))
 }
 
 fn register_count(info: &RegisterInfo) -> u32 {
@@ -705,4 +634,52 @@ fn materialize_elements(info: &RegisterInfo) -> Vec<PendingElement> {
 
 fn element_bytes(bit_width: usize) -> usize {
     ((bit_width + 7) / 8).max(1)
+}
+
+fn collect_subfield_specs(
+    store_bitw: u32,
+    space: &str,
+    register: &str,
+    subfields: &[SubFieldDecl],
+) -> Result<Vec<(String, BitFieldSpec)>, IsaError> {
+    let mut entries = Vec::with_capacity(subfields.len());
+    for sub in subfields {
+        let spec =
+            BitFieldSpec::from_spec_str(store_bitw as u16, &sub.bit_spec).map_err(|err| {
+                IsaError::Machine(format!(
+                    "invalid bit spec '{}' on register '{}::{}::{}': {err}",
+                    sub.bit_spec, space, register, sub.name
+                ))
+            })?;
+        entries.push((sub.name.clone(), spec));
+    }
+    Ok(entries)
+}
+
+fn finish_scalar_fields(
+    builder: &mut TypeBuilder<'_>,
+    store_bitw: u32,
+    entries: Vec<(String, BitFieldSpec)>,
+) -> (Vec<RegisterFieldMetadata>, TypeId) {
+    let storage_bytes = element_bytes(store_bitw as usize);
+    let mut scalar = builder.scalar_with_fields(storage_bytes);
+    let mut names = Vec::with_capacity(entries.len());
+    for (name, spec) in entries {
+        let name_id = builder.intern(&name);
+        scalar.push_spec(name_id, spec);
+        names.push(name);
+    }
+    let owner = scalar.finish_with(builder);
+    let fields = names
+        .into_iter()
+        .enumerate()
+        .map(|(idx, name)| RegisterFieldMetadata {
+            name,
+            handle: ScalarFieldHandle {
+                owner,
+                field_index: idx as u16,
+            },
+        })
+        .collect();
+    (fields, owner)
 }

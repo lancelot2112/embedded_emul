@@ -4,14 +4,12 @@
 //! providing Rust-friendly error handling and concurrency semantics.
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::soc::{bus::BusCursor, device::Device};
+use crate::soc::device::Device;
 
 use super::{
     error::{BusError, BusResult},
     range::BusRange,
 };
-
-const DEVICE_PRIORITY: u8 = 0;
 
 pub type DeviceRef = Arc<dyn Device>;
 
@@ -22,7 +20,8 @@ pub struct DeviceBus {
     // Mapping physical address ranges to Device IDs
     // Key: Start Address -> (End Address, DeviceId, RemapOffset)
     map: BTreeMap<usize, BusRange>,
-    address_size: usize, // in bits
+    _address_size: usize, // in bits
+    pending: Vec<BusRange>,
 }
 
 impl DeviceBus {
@@ -30,7 +29,8 @@ impl DeviceBus {
         Self {
             devices: Vec::new(),
             map: BTreeMap::new(),
-            address_size,
+            _address_size: address_size,
+            pending: Vec::new(),
         }
     }
 
@@ -52,6 +52,12 @@ impl DeviceBus {
             device_id,
             priority,
         };
+
+        if self.has_blocking_overlap(range.bus_start, range.bus_end, range.priority) {
+            self.pending.push(range);
+            return Ok(());
+        }
+
         self.insert_range(range)
     }
 
@@ -60,6 +66,7 @@ impl DeviceBus {
             .range_key_for_address(address)
             .ok_or(BusError::NotMapped { address })?;
         self.map.remove(&key);
+        self.activate_pending()?;
         Ok(())
     }
 
@@ -67,10 +74,15 @@ impl DeviceBus {
     /// Callers that need to construct custom views (TLBs, MMUs, etc) can reuse this to
     /// validate that a downstream redirect stays within a single device span.
     pub fn resolve_device_at(&self, address: usize) -> BusResult<(DeviceRef, BusRange)> {
-        let range = self
+        let mut range = self
             .range_for_address(address)
             .cloned()
             .ok_or(BusError::InvalidAddress { address })?;
+        if address > range.bus_start {
+            let delta = address - range.bus_start;
+            range.bus_start = address;
+            range.device_offset += delta;
+        }
         Ok((self.devices[range.device_id].clone(), range))
     }
 }
@@ -80,6 +92,34 @@ impl DeviceBus {
         self.clear_overlaps(&range)?;
         self.map.insert(range.bus_start, range);
         Ok(())
+    }
+
+    fn activate_pending(&mut self) -> BusResult<()> {
+        let mut idx = 0;
+        while idx < self.pending.len() {
+            let should_try = {
+                let candidate = &self.pending[idx];
+                !self.has_blocking_overlap(candidate.bus_start, candidate.bus_end, candidate.priority)
+            };
+            if should_try {
+                let candidate = self.pending.remove(idx);
+                self.insert_range(candidate)?;
+            } else {
+                idx += 1;
+            }
+        }
+        Ok(())
+    }
+
+    fn has_blocking_overlap(&self, start: usize, end: usize, priority: u8) -> bool {
+        for key in self.collect_overlap_keys(start, end) {
+            if let Some(existing) = self.map.get(&key) {
+                if existing.priority >= priority {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn range_for_address(&self, address: usize) -> Option<&BusRange> {
@@ -181,6 +221,8 @@ mod tests {
     use crate::soc::device::{AccessContext, DeviceResult, Endianness};
     use std::ops::Range;
 
+    const DEVICE_PRIORITY: u8 = 0;
+
     struct ProbeDevice {
         name: String,
         backing: Vec<u8>,
@@ -271,14 +313,14 @@ mod tests {
         bus.map_device(low, 0x8000, DEVICE_PRIORITY)
             .expect("mapping succeeds");
 
-        let (dev, range) = bus.resolve_device_at(0x8000).expect("resolve address");
+        let (dev, _) = bus.resolve_device_at(0x8000).expect("resolve address");
         assert_eq!(
             dev.name(),
             "hi",
             "higher priority device should take precedence"
         );
         bus.unmap(0x8000).expect("remove higher priority range");
-        let (dev, range) = bus.resolve_device_at(0x8000).expect("resolve address");
+        let (dev, _) = bus.resolve_device_at(0x8000).expect("resolve address");
         assert_eq!(
             dev.name(),
             "lo",
@@ -297,19 +339,19 @@ mod tests {
         bus.map_device(high, 0x2060, DEVICE_PRIORITY + 10)
             .expect("register high priority slice");
 
-        let (dev, range) = bus.resolve_device_at(0x2000).expect("resolve low start");
+        let (dev, _) = bus.resolve_device_at(0x2000).expect("resolve low start");
         assert_eq!(
             dev.name(),
             "low",
             "low priority device should be visible before high range"
         );
-        let (dev, range) = bus.resolve_device_at(0x2060).expect("resolve high start");
+        let (dev, _) = bus.resolve_device_at(0x2060).expect("resolve high start");
         assert_eq!(
             dev.name(),
             "high",
             "high priority device should be visible in its range"
         );
-        let (dev, range) = bus
+        let (dev, _) = bus
             .resolve_device_at(0x20A0)
             .expect("resolve low after high range");
         assert_eq!(

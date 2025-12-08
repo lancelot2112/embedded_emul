@@ -4,7 +4,7 @@ use smallvec::SmallVec;
 
 use super::aggregate::AggregateType;
 use super::arena::{TypeArena, TypeId};
-use super::record::{MemberRecord, TypeRecord};
+use super::arena_record::{MemberRecord, TypeRecord};
 
 #[derive(Clone, Debug)]
 pub struct ResolvedMember<'a> {
@@ -88,7 +88,7 @@ mod tests {
     use super::*;
     use crate::soc::prog::types::aggregate::AggregateKind;
     use crate::soc::prog::types::arena::TypeArena;
-    use crate::soc::prog::types::record::{LayoutSize, MemberRecord, TypeRecord};
+    use crate::soc::prog::types::arena_record::{LayoutSize, MemberRecord, TypeRecord};
     use crate::soc::prog::types::scalar::{DisplayFormat, ScalarEncoding, ScalarType};
 
     #[test]

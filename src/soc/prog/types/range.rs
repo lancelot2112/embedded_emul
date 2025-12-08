@@ -215,7 +215,7 @@ fn parse_length_expr(expr: &str) -> Result<u64, RangeSpecError> {
             }
         }
         Err(err) => {
-            if let Some(suffix) = suffix_token {
+            if let Some(_suffix) = suffix_token {
                 return Err(RangeSpecError::LengthLiteral(err));
             }
             if let Some((literal, suffix)) = strip_appended_suffix(literal_token) {

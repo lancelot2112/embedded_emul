@@ -4,21 +4,35 @@ use smallvec::SmallVec;
 
 use crate::soc::prog::types::aggregate::AggregateType;
 use crate::soc::prog::types::arena::{StringId, TypeArena, TypeId};
-use crate::soc::prog::types::record::TypeRecord;
+use crate::soc::prog::types::arena_record::TypeRecord;
 use crate::soc::prog::types::scalar::{ScalarEncoding, ScalarType};
+use crate::soc::prog::types::scalar_with_fields::ScalarWithFieldsRecord;
 use crate::soc::prog::types::sequence::SequenceType;
 
 /// Enumerates the primitive leaf shapes emitted by the walker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValueKind {
-    Unsigned { bytes: usize },
-    Signed { bytes: usize },
+    Unsigned {
+        bytes: usize,
+    },
+    Signed {
+        bytes: usize,
+    },
     Float32,
     Float64,
-    Utf8 { bytes: usize },
+    Utf8 {
+        bytes: usize,
+    },
     Enum,
     Fixed,
-    Pointer { bytes: usize, target: TypeId },
+    Pointer {
+        bytes: usize,
+        target: TypeId,
+    },
+    ScalarField {
+        owner: TypeId,
+        base_offset_bits: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -98,10 +112,18 @@ impl SymbolPath {
 }
 
 #[derive(Clone, Debug)]
-struct FrameState {
-    ty: TypeId,
-    offset_bits: usize,
-    path: SymbolPath,
+enum FrameState {
+    Type {
+        ty: TypeId,
+        offset_bits: usize,
+        path: SymbolPath,
+    },
+    Field {
+        owner: TypeId,
+        field_ty: TypeId,
+        base_offset_bits: usize,
+        path: SymbolPath,
+    },
 }
 
 /// Stateful iterator that performs a depth-first walk of the provided type identifier.
@@ -113,7 +135,7 @@ pub struct SymbolWalker<'arena> {
 impl<'arena> SymbolWalker<'arena> {
     pub fn new(arena: &'arena TypeArena, root: TypeId) -> Self {
         let mut stack = SmallVec::new();
-        stack.push(FrameState {
+        stack.push(FrameState::Type {
             ty: root,
             offset_bits: 0,
             path: SymbolPath::root(),
@@ -121,33 +143,53 @@ impl<'arena> SymbolWalker<'arena> {
         Self { arena, stack }
     }
 
-    fn push_sequence(&mut self, frame: &FrameState, sequence: &SequenceType) {
+    fn push_sequence(&mut self, offset_bits: usize, path: &SymbolPath, sequence: &SequenceType) {
         let Some(count) = sequence.element_count() else {
             return;
         };
         let stride = (sequence.stride_bytes) * 8;
         for index in (0..count).rev() {
-            let offset_bits = frame.offset_bits + (index) * stride;
-            self.stack.push(FrameState {
+            let element_offset = offset_bits + (index) * stride;
+            self.stack.push(FrameState::Type {
                 ty: sequence.element,
-                offset_bits,
-                path: frame.path.push_index(index),
+                offset_bits: element_offset,
+                path: path.push_index(index),
             });
         }
     }
 
-    fn push_aggregate(&mut self, frame: &FrameState, aggregate: &AggregateType) {
+    fn push_aggregate(&mut self, offset_bits: usize, path: &SymbolPath, aggregate: &AggregateType) {
         if aggregate.members.is_empty() {
             return;
         }
         let members = self.arena.members(aggregate.members);
         for member in members.iter().rev() {
-            let offset_bits = frame.offset_bits + member.offset_bits as usize;
-            let path = frame.path.push_member(member.name_id);
-            self.stack.push(FrameState {
+            let offset_bits = offset_bits + member.offset_bits as usize;
+            let path = path.push_member(member.name_id);
+            self.stack.push(FrameState::Type {
                 ty: member.ty,
                 offset_bits,
                 path,
+            });
+        }
+    }
+
+    fn push_scalar_fields(
+        &mut self,
+        base_offset_bits: usize,
+        path: &SymbolPath,
+        record: &ScalarWithFieldsRecord,
+    ) {
+        if record.fields.is_empty() {
+            return;
+        }
+        let fields = self.arena.fields(record.fields);
+        for field in fields.iter().rev() {
+            self.stack.push(FrameState::Field {
+                owner: record.storage,
+                field_ty: field.ty,
+                base_offset_bits,
+                path: path.push_member(Some(field.name_id)),
             });
         }
     }
@@ -158,62 +200,88 @@ impl<'arena> Iterator for SymbolWalker<'arena> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(frame) = self.stack.pop() {
-            match self.arena.get(frame.ty) {
-                TypeRecord::Scalar(scalar) => {
-                    if let Some(entry) = walk_scalar(frame.ty, scalar, &frame) {
-                        return Some(entry);
+            match frame {
+                FrameState::Type {
+                    ty,
+                    offset_bits,
+                    path,
+                } => match self.arena.get(ty) {
+                    TypeRecord::Scalar(scalar) => {
+                        if let Some(entry) = walk_scalar(ty, scalar, offset_bits, path.clone()) {
+                            return Some(entry);
+                        }
                     }
-                }
-                TypeRecord::Enum(_) => {
+                    TypeRecord::Enum(_) => {
+                        return Some(SymbolWalkEntry {
+                            ty,
+                            path,
+                            offset_bits,
+                            bit_len: scalar_bits(ty, self.arena).unwrap_or(0),
+                            kind: ValueKind::Enum,
+                        });
+                    }
+                    TypeRecord::Fixed(_) => {
+                        return Some(SymbolWalkEntry {
+                            ty,
+                            path,
+                            offset_bits,
+                            bit_len: scalar_bits(ty, self.arena).unwrap_or(0),
+                            kind: ValueKind::Fixed,
+                        });
+                    }
+                    TypeRecord::Pointer(pointer) => {
+                        let bytes = pointer.byte_size;
+                        return Some(SymbolWalkEntry {
+                            ty,
+                            path,
+                            offset_bits,
+                            bit_len: bytes * 8,
+                            kind: ValueKind::Pointer {
+                                bytes,
+                                target: pointer.target,
+                            },
+                        });
+                    }
+                    TypeRecord::Sequence(sequence) => {
+                        self.push_sequence(offset_bits, &path, sequence);
+                    }
+                    TypeRecord::Aggregate(aggregate) => {
+                        self.push_aggregate(offset_bits, &path, aggregate);
+                    }
+                    TypeRecord::BitField(bitfield) => {
+                        return Some(SymbolWalkEntry {
+                            ty,
+                            path,
+                            offset_bits,
+                            bit_len: bitfield.total_width() as usize,
+                            kind: ValueKind::Unsigned {
+                                bytes: (bitfield.total_width() as usize).div_ceil(8),
+                            },
+                        });
+                    }
+                    TypeRecord::Callable(_) | TypeRecord::Dynamic(_) | TypeRecord::Opaque(_) => {
+                        // Unsupported shapes are skipped entirely.
+                    }
+                    TypeRecord::ScalarWithFields(record) => {
+                        self.push_scalar_fields(offset_bits, &path, record);
+                    }
+                },
+                FrameState::Field {
+                    owner,
+                    field_ty,
+                    base_offset_bits,
+                    path,
+                } => {
                     return Some(SymbolWalkEntry {
-                        ty: frame.ty,
-                        path: frame.path,
-                        offset_bits: frame.offset_bits,
-                        bit_len: scalar_bits(frame.ty, self.arena).unwrap_or(0),
-                        kind: ValueKind::Enum,
-                    });
-                }
-                TypeRecord::Fixed(_) => {
-                    return Some(SymbolWalkEntry {
-                        ty: frame.ty,
-                        path: frame.path,
-                        offset_bits: frame.offset_bits,
-                        bit_len: scalar_bits(frame.ty, self.arena).unwrap_or(0),
-                        kind: ValueKind::Fixed,
-                    });
-                }
-                TypeRecord::Pointer(pointer) => {
-                    let bytes = pointer.byte_size;
-                    return Some(SymbolWalkEntry {
-                        ty: frame.ty,
-                        path: frame.path,
-                        offset_bits: frame.offset_bits,
-                        bit_len: bytes * 8,
-                        kind: ValueKind::Pointer {
-                            bytes,
-                            target: pointer.target,
+                        ty: field_ty,
+                        path,
+                        offset_bits: base_offset_bits,
+                        bit_len: scalar_bits(field_ty, self.arena).unwrap_or(0),
+                        kind: ValueKind::ScalarField {
+                            owner,
+                            base_offset_bits,
                         },
                     });
-                }
-                TypeRecord::Sequence(sequence) => {
-                    self.push_sequence(&frame, sequence);
-                }
-                TypeRecord::Aggregate(aggregate) => {
-                    self.push_aggregate(&frame, aggregate);
-                }
-                TypeRecord::BitField(bitfield) => {
-                    return Some(SymbolWalkEntry {
-                        ty: frame.ty,
-                        path: frame.path,
-                        offset_bits: frame.offset_bits,
-                        bit_len: bitfield.total_width() as usize,
-                        kind: ValueKind::Unsigned {
-                            bytes: (bitfield.total_width() as usize).div_ceil(8),
-                        },
-                    });
-                }
-                TypeRecord::Callable(_) | TypeRecord::Dynamic(_) | TypeRecord::Opaque(_) => {
-                    // Unsupported shapes are skipped entirely.
                 }
             }
         }
@@ -221,7 +289,12 @@ impl<'arena> Iterator for SymbolWalker<'arena> {
     }
 }
 
-fn walk_scalar(ty: TypeId, scalar: &ScalarType, frame: &FrameState) -> Option<SymbolWalkEntry> {
+fn walk_scalar(
+    ty: TypeId,
+    scalar: &ScalarType,
+    offset_bits: usize,
+    path: SymbolPath,
+) -> Option<SymbolWalkEntry> {
     let bit_len = scalar.byte_size * 8;
     let kind = match scalar.encoding {
         ScalarEncoding::Unsigned => ValueKind::Unsigned {
@@ -241,8 +314,8 @@ fn walk_scalar(ty: TypeId, scalar: &ScalarType, frame: &FrameState) -> Option<Sy
     };
     Some(SymbolWalkEntry {
         ty,
-        path: frame.path.clone(),
-        offset_bits: frame.offset_bits,
+        path,
+        offset_bits,
         bit_len,
         kind,
     })
@@ -263,9 +336,9 @@ fn scalar_bits(ty: TypeId, arena: &TypeArena) -> Option<usize> {
 mod tests {
     use super::*;
     use crate::soc::prog::types::aggregate::AggregateKind;
+    use crate::soc::prog::types::arena_record::{ArenaSpan, LayoutSize, TypeRecord};
     use crate::soc::prog::types::builder::TypeBuilder;
     use crate::soc::prog::types::pointer::PointerKind;
-    use crate::soc::prog::types::record::{LayoutSize, MemberSpan, TypeRecord};
     use crate::soc::prog::types::scalar::{DisplayFormat, ScalarType};
 
     #[test]
@@ -331,7 +404,7 @@ mod tests {
     #[test]
     fn aggregate_without_members_is_skipped() {
         let mut arena = TypeArena::new();
-        let span = MemberSpan::empty();
+        let span = ArenaSpan::empty();
         let agg = AggregateType::new(AggregateKind::Struct, span, LayoutSize::ZERO);
         let agg_id = arena.push_record(TypeRecord::Aggregate(agg));
         let mut walker = SymbolWalker::new(&arena, agg_id);

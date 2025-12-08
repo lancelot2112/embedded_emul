@@ -1,5 +1,3 @@
-use crate::soc::device::Endianness;
-
 pub struct BitFieldSpec {
     pub name: String,
     pub bit_offset: u8, // Bit offset within the register
@@ -59,8 +57,4 @@ pub struct RegSpec {
     pub offset: usize,        // Byte offset within MMIO region
     pub count: Option<usize>, // Number of consecutive registers (for arrays)
     pub bit_len: u8,          //Total bit length of each register
-}
-struct MemoryMappedIO {
-    bytes: Vec<u8>,
-    endian: Endianness,
 }

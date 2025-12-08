@@ -1,7 +1,7 @@
 //! Helpers for computing effective symbol and type sizes used by the bus bridge.
 
 use crate::soc::prog::types::arena::{TypeArena, TypeId};
-use crate::soc::prog::types::record::TypeRecord;
+use crate::soc::prog::types::arena_record::TypeRecord;
 use crate::soc::prog::types::sequence::{SequenceCount, SequenceType};
 
 pub fn type_size(arena: &TypeArena, ty: TypeId) -> Option<usize> {

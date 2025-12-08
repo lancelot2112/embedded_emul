@@ -3,8 +3,6 @@
 
 use std::collections::BTreeMap;
 
-use sha2::digest::consts::U16383;
-
 use crate::soc::device::endianness::Endianness;
 use crate::soc::isa::ast::{FieldDecl, FormDecl, SpaceAttribute, SpaceDecl, SpaceKind, SubFieldOp};
 use crate::soc::isa::error::IsaError;

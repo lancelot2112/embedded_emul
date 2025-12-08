@@ -2,18 +2,17 @@
 
 use super::*;
 use crate::soc::bus::{BusCursor, DeviceBus};
-use crate::soc::device::{AccessContext, Device, Endianness as DeviceEndianness, RamMemory};
+use crate::soc::device::{AccessContext, Endianness as DeviceEndianness, RamMemory};
 use crate::soc::prog::symbols::SymbolTable;
 use crate::soc::prog::symbols::symbol::SymbolState;
 use crate::soc::prog::symbols::walker::ValueKind;
 use crate::soc::prog::types::aggregate::AggregateKind;
 use crate::soc::prog::types::arena::{TypeArena, TypeId};
+use crate::soc::prog::types::arena_record::TypeRecord;
 use crate::soc::prog::types::bitfield::{BitFieldSpec, PadKind, PadSpec};
 use crate::soc::prog::types::builder::TypeBuilder;
-use crate::soc::prog::types::record::TypeRecord;
-use crate::soc::prog::types::scalar::{
-    DisplayFormat, EnumType, EnumVariant, ScalarEncoding, ScalarStorage, ScalarType,
-};
+use crate::soc::prog::types::enum_scalar::{EnumType, EnumVariant};
+use crate::soc::prog::types::scalar::{DisplayFormat, ScalarEncoding, ScalarStorage, ScalarType};
 use std::sync::Arc;
 
 fn make_cursor(size: usize) -> BusCursor {
@@ -47,7 +46,7 @@ fn reads_unsigned_scalar_value() {
         .write_ram(&u32::to_le_bytes(0xDEAD_BEEF))
         .unwrap();
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let value = symbol_handle.read_value(handle).expect("value read");
     assert_eq!(
         value,
@@ -80,7 +79,7 @@ fn enum_value_reports_label() {
     let mut cursor = make_cursor(0x40);
     cursor.goto(0x10).unwrap().write_ram(&[1]).unwrap();
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let value = symbol_handle.read_value(handle).expect("enum value");
     assert_eq!(
         value,
@@ -107,7 +106,7 @@ fn missing_address_reports_error() {
         .finish();
 
     let mut cursor = make_cursor(0x10);
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let err = symbol_handle
         .read_value(handle)
         .expect_err("missing address");
@@ -149,7 +148,7 @@ fn pointer_deref_reads_target_value() {
         .write_ram(&u64::to_le_bytes(0x10))
         .expect("write pointer value");
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
     let entry = cursor.try_next().expect("pointer entry").expect("value");
     assert!(
@@ -197,7 +196,7 @@ fn walker_iterates_structured_arrays() {
         .write_ram(&[0x01, 0x00, 0x02, 0x00, 0x03, 0x00])
         .expect("write array data");
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
     let mut seen = Vec::new();
     while let Some(value) = cursor.try_next().expect("next") {
@@ -235,7 +234,7 @@ fn mixed_data_and_bitfield_values() {
     };
     let container_storage = ScalarStorage::for_bytes(2);
     let bitfield_id = {
-        let bitfield = BitFieldSpec::from_range(container_storage, 0, 12);
+        let bitfield = BitFieldSpec::from_range(container_storage.bit_size(), 0, 12);
         arena.push_record(TypeRecord::BitField(bitfield))
     };
     let agg_id = {
@@ -266,7 +265,7 @@ fn mixed_data_and_bitfield_values() {
         .write_ram(&payload)
         .expect("write payload");
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
 
     let first = cursor.try_next().expect("header step").expect("value");
@@ -316,7 +315,7 @@ fn bitfield_members_read_individually() {
     let bitfield_ids: Vec<TypeId> = specs
         .iter()
         .map(|(_, offset)| {
-            let bitfield = BitFieldSpec::from_range(backing_storage, *offset, 3);
+            let bitfield = BitFieldSpec::from_range(backing_storage.bit_size(), *offset, 3);
             arena.push_record(TypeRecord::BitField(bitfield))
         })
         .collect();
@@ -347,7 +346,7 @@ fn bitfield_members_read_individually() {
         .write_ram(&u16::to_le_bytes(packed))
         .expect("write packed bitfield");
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
     let mut seen = Vec::new();
     while let Some(step) = cursor.try_next().expect("cursor step") {
@@ -372,7 +371,7 @@ fn bitfield_sign_extension_honors_pad() {
     let mut arena = TypeArena::new();
     let storage = ScalarStorage::for_bytes(1);
     let bitfield_id = {
-        let spec = BitFieldSpec::builder(storage)
+        let spec = BitFieldSpec::builder(storage.bit_size())
             .range(4, 4)
             .pad(PadSpec::new(PadKind::Sign, 4))
             .signed(true)
@@ -404,7 +403,7 @@ fn bitfield_sign_extension_honors_pad() {
         .write_ram(&[0xE0])
         .expect("write bitfield data");
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
     let value = cursor.try_next().expect("bitfield entry").expect("value");
     assert_eq!(value.entry.path.to_string(arena.as_ref()), "field");
@@ -465,7 +464,7 @@ fn union_members_overlay_same_bytes() {
         .write_ram(&overlay)
         .expect("write overlay data");
 
-    let mut symbol_handle = SymbolHandle::new(&table, &mut cursor);
+    let mut symbol_handle = SymbolBus::new(&table, &mut cursor);
     let mut cursor = symbol_handle.value_cursor(handle).expect("cursor");
 
     let first = cursor.try_next().expect("as_u32 step").expect("value");

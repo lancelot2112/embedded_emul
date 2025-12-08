@@ -14,7 +14,7 @@ pub trait StringCursorExt {
 impl StringCursorExt for BusCursor {
     fn read_utf8(&mut self, len: usize) -> BusResult<String> {
         let buf = self.read_ram(len)?;
-        Ok(trim_nul(Cow::Borrowed(buf.as_slice())).into_owned())
+        Ok(trim_nul(Cow::Borrowed(buf)).into_owned())
     }
 
     fn read_c_string(&mut self, max_len: usize) -> BusResult<String> {

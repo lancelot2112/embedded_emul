@@ -14,6 +14,58 @@ fn mask_for_width(width: u16) -> u64 {
     1u64.unbounded_shl(width as u32).wrapping_sub(1)
 }
 
+fn lower_bits_mask(offset: u16) -> u64 {
+    if offset == 0 {
+        0
+    } else if offset as u32 >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << offset) - 1
+    }
+}
+
+fn prefix_popcount(mask: u64, offset: u16) -> u16 {
+    (mask & lower_bits_mask(offset)).count_ones() as u16
+}
+
+#[cfg(target_arch = "x86_64")]
+mod bmi2 {
+    #[inline]
+    pub fn pext(value: u64, mask: u64) -> Option<u64> {
+        if mask == 0 {
+            return Some(0);
+        }
+        if std::arch::is_x86_feature_detected!("bmi2") {
+            unsafe { Some(core::arch::x86_64::_pext_u64(value, mask)) }
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn pdep(value: u64, mask: u64) -> Option<u64> {
+        if mask == 0 {
+            return Some(0);
+        }
+        if std::arch::is_x86_feature_detected!("bmi2") {
+            unsafe { Some(core::arch::x86_64::_pdep_u64(value, mask)) }
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+mod bmi2 {
+    pub fn pext(_: u64, _: u64) -> Option<u64> {
+        None
+    }
+
+    pub fn pdep(_: u64, _: u64) -> Option<u64> {
+        None
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BitSlice {
     pub offset: u16,
@@ -70,10 +122,18 @@ impl PadSpec {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitFieldSpec {
-    pub storage: ScalarStorage,
+    storage: ScalarStorage,
     pub segments: SmallVec<[BitFieldSegment; 4]>,
     pub pad: Option<PadSpec>,
     pub signed: bool,
+    pub mask: u64,
+    slice_meta: SmallVec<[Option<SliceMeta>; 4]>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SliceMeta {
+    rank_start: u16,
+    width: u8,
 }
 
 impl BitFieldSpec {
@@ -82,19 +142,16 @@ impl BitFieldSpec {
     }
 
     pub fn from_range(store_bitw: u16, offset: u16, range_bitw: u16) -> Self {
-        BitFieldSpec::builder(store_bitw).range(offset, range_bitw).finish()
+        BitFieldSpec::builder(store_bitw)
+            .range(offset, range_bitw)
+            .finish()
     }
 
     /// Parses an ISA-style bit spec string (e.g. `@(16..29|0b00)`), assuming MSB-zero numbering
     /// for ranges as described in the language specification.
-    pub fn from_spec_str(
-        store_bitw: u16,
-        spec: &str,
-    ) -> Result<Self, BitFieldError> {
+    pub fn from_spec_str(store_bitw: u16, spec: &str) -> Result<Self, BitFieldError> {
         if store_bitw == 0 || store_bitw > MAX_BITFIELD_BITS {
-            return Err(BitFieldError::ContainerTooWide {
-                bits: store_bitw,
-            });
+            return Err(BitFieldError::ContainerTooWide { bits: store_bitw });
         }
         let storage = ScalarStorage::for_bits(store_bitw as usize);
         let body = extract_spec_body(spec)?;
@@ -144,6 +201,8 @@ impl BitFieldSpec {
             segments,
             pad: None,
             signed: false,
+            mask: 0,
+            slice_meta: SmallVec::new(),
         };
         if let Some(kind) = pad_kind {
             let data_bits = result.data_width();
@@ -163,7 +222,30 @@ impl BitFieldSpec {
                 bits: result.total_width(),
             });
         }
+        result.rebuild_cache();
         Ok(result)
+    }
+
+    fn rebuild_cache(&mut self) {
+        self.mask = 0;
+        self.slice_meta.clear();
+        self.slice_meta.reserve(self.segments.len());
+        for segment in &self.segments {
+            if let BitFieldSegment::Slice(slice) = segment {
+                self.mask |= slice.mask;
+            }
+        }
+        for segment in &self.segments {
+            if let BitFieldSegment::Slice(slice) = segment {
+                let rank = prefix_popcount(self.mask, slice.offset);
+                self.slice_meta.push(Some(SliceMeta {
+                    rank_start: rank,
+                    width: slice.width,
+                }));
+            } else {
+                self.slice_meta.push(None);
+            }
+        }
     }
 
     pub fn total_width(&self) -> u16 {
@@ -238,6 +320,9 @@ impl BitFieldSpec {
     /// Extracts the logical field value from the provided container bits. Returns the value and
     /// its effective width after padding.
     pub fn read_bits(&self, bits: u64) -> (u64, u16) {
+        if let Some((value, width)) = self.extract_data_parallel(bits) {
+            return self.apply_pad(value, width);
+        }
         let (value, width) = self.extract_data(bits);
         self.apply_pad(value, width)
     }
@@ -309,6 +394,9 @@ impl BitFieldSpec {
             }
             value &= mask_for_width(data_width);
         }
+        if let Some(result) = self.try_write_parallel(container, value, data_width, total) {
+            return result;
+        }
         let mut remaining = data_width;
         for segment in &self.segments {
             match segment {
@@ -360,6 +448,110 @@ impl BitFieldSpec {
         Ok(container)
     }
 
+    fn extract_data_parallel(&self, bits: u64) -> Option<(u64, u16)> {
+        if self.mask == 0 {
+            return None;
+        }
+        let extracted = bmi2::pext(bits, self.mask)?;
+        let mut acc = 0u128;
+        let mut acc_width: u16 = 0;
+        for (segment, meta) in self.segments.iter().zip(self.slice_meta.iter()) {
+            match (segment, meta) {
+                (BitFieldSegment::Slice(_), Some(slice_meta)) => {
+                    let width = slice_meta.width as u16;
+                    let part_mask = mask_for_width(width);
+                    let part = (extracted >> slice_meta.rank_start) & part_mask;
+                    acc = (acc << width) | u128::from(part);
+                    acc_width += width;
+                }
+                (BitFieldSegment::Literal { value, width }, _) => {
+                    let width_u16 = *width as u16;
+                    let mask = mask_for_width(width_u16);
+                    acc = (acc << width_u16) | u128::from((*value as u64) & mask);
+                    acc_width += width_u16;
+                }
+                (BitFieldSegment::Slice(_), None) => return None,
+            }
+        }
+        Some((acc as u64, acc_width))
+    }
+
+    fn try_write_parallel(
+        &self,
+        container: u64,
+        value: u64,
+        data_width: u16,
+        total: u16,
+    ) -> Option<Result<u64, BitFieldError>> {
+        if self.mask == 0 {
+            return None;
+        }
+        let mut remaining = data_width;
+        let mut deposit_bits = 0u64;
+        for (segment, meta) in self.segments.iter().zip(self.slice_meta.iter()) {
+            match (segment, meta) {
+                (BitFieldSegment::Slice(_), Some(slice_meta)) => {
+                    let width = slice_meta.width as u16;
+                    remaining = remaining
+                        .checked_sub(width)
+                        .ok_or(BitFieldError::ValueTooWide {
+                            bits: data_width,
+                            total,
+                        })
+                        .ok()?;
+                    let part_mask = mask_for_width(width);
+                    let part = (value >> remaining) & part_mask;
+                    deposit_bits |= part << slice_meta.rank_start;
+                }
+                (
+                    BitFieldSegment::Literal {
+                        value: literal,
+                        width,
+                    },
+                    _,
+                ) => {
+                    let width_u16 = *width as u16;
+                    remaining = remaining
+                        .checked_sub(width_u16)
+                        .ok_or(BitFieldError::ValueTooWide {
+                            bits: data_width,
+                            total,
+                        })
+                        .ok()?;
+                    let mask = mask_for_width(width_u16);
+                    let part = (value >> remaining) & mask;
+                    if part != (*literal & mask) {
+                        return Some(Err(BitFieldError::LiteralMismatch {
+                            expected: *literal & mask,
+                            actual: part,
+                            width: *width,
+                        }));
+                    }
+                }
+                (BitFieldSegment::Slice(_), None) => return None,
+            }
+        }
+        if remaining != 0 {
+            return Some(Err(BitFieldError::ValueTooWide {
+                bits: data_width,
+                total,
+            }));
+        }
+        let scatter = match bmi2::pdep(deposit_bits, self.mask) {
+            Some(bits) => bits,
+            None => return None,
+        };
+        let cleared = container & !self.mask;
+        Some(Ok(cleared | scatter))
+    }
+
+    pub fn storage_bits(&self) -> u16 {
+        self.storage.bit_size()
+    }
+
+    pub fn storage_bytes(&self) -> usize {
+        self.storage.byte_size()
+    }
 }
 
 pub struct BitFieldSpecBuilder {
@@ -404,14 +596,20 @@ impl BitFieldSpecBuilder {
     pub fn finish(mut self) -> BitFieldSpec {
         // If empty, default to a full-width slice
         if self.segments.is_empty() {
-            self.segments.push(BitFieldSegment::Slice(BitSlice::new(0, self.storage.bit_size() as u16).unwrap()));
+            self.segments.push(BitFieldSegment::Slice(
+                BitSlice::new(0, self.storage.bit_size() as u16).unwrap(),
+            ));
         }
-        BitFieldSpec {
+        let mut spec = BitFieldSpec {
             storage: self.storage,
             segments: self.segments,
             pad: self.pad,
             signed: self.signed,
-        }
+            mask: 0,
+            slice_meta: SmallVec::new(),
+        };
+        spec.rebuild_cache();
+        spec
     }
 }
 
@@ -629,7 +827,8 @@ mod tests {
     fn from_range_creates_single_segment() {
         let spec = BitFieldSpec::from_range(8, 4, 5);
         assert_eq!(
-            spec.storage.byte_size(), 1,
+            spec.storage_bytes(),
+            1,
             "bitfield should remember storage selection"
         );
         assert_eq!(
@@ -674,7 +873,7 @@ mod tests {
             spec.is_signed(),
             "explicit signed flag should mark spec as signed"
         );
-        assert_eq!(spec.storage.byte_size(), 2, "builder should retain storage");
+        assert_eq!(spec.storage_bytes(), 2, "builder should retain storage");
     }
 
     #[test]
@@ -706,8 +905,7 @@ mod tests {
 
     #[test]
     fn parses_sign_pad_spec() {
-        let spec =
-            BitFieldSpec::from_spec_str(32, "@(?1|16..29|0b00)").expect("spec parse");
+        let spec = BitFieldSpec::from_spec_str(32, "@(?1|16..29|0b00)").expect("spec parse");
         assert!(
             matches!(
                 spec.pad,
@@ -767,5 +965,11 @@ mod tests {
             signed, -1,
             "sign-padded specs should return negative values"
         );
+    }
+
+    #[test]
+    fn spec_reports_slice_mask() {
+        let spec = BitFieldSpec::builder(16).range(0, 4).range(8, 4).finish();
+        assert_eq!(spec.mask, 0x0F0F, "mask should union all slice bits");
     }
 }

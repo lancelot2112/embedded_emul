@@ -9,8 +9,8 @@ use crate::soc::isa::machine::{
 };
 use crate::soc::isa::semantics::program::RegisterRef;
 use crate::soc::prog::types::arena::TypeArena;
+use crate::soc::prog::types::arena_record::TypeRecord;
 use crate::soc::prog::types::bitfield::BitFieldSpec;
-use crate::soc::prog::types::record::TypeRecord;
 
 use crate::soc::isa::semantics::value::SemanticValue;
 
@@ -384,10 +384,28 @@ impl<'schema> ResolvedRegister<'schema> {
     }
 
     fn field_spec(&self, field: &RegisterFieldMetadata) -> Result<&BitFieldSpec, IsaError> {
-        match self.arena.get(field.ty) {
-            TypeRecord::BitField(spec) => Ok(spec),
+        match self.arena.get(field.handle.owner) {
+            TypeRecord::ScalarWithFields(record) => {
+                let fields = self.arena.fields(record.fields);
+                let field_type = fields
+                    .get(field.handle.field_index as usize)
+                    .map(|entry| self.arena.get(entry.ty))
+                    .ok_or_else(|| {
+                        IsaError::Machine(format!(
+                            "subfield '{}' exceeds declared field count",
+                            field.name
+                        ))
+                    })?;
+                match field_type {
+                    TypeRecord::BitField(spec) => Ok(spec),
+                    other => Err(IsaError::Machine(format!(
+                        "subfield '{}' has invalid type {:?}",
+                        field.name, other
+                    ))),
+                }
+            }
             _ => Err(IsaError::Machine(format!(
-                "subfield '{}' lacks bitfield metadata",
+                "subfield '{}' lacks scalar-with-fields metadata",
                 field.name
             ))),
         }
@@ -409,9 +427,10 @@ impl<'schema> ResolvedRegister<'schema> {
 
     pub fn bit_width(&self) -> u32 {
         if let Some(field) = self.field {
-            match self.arena.get(field.ty) {
-                TypeRecord::BitField(spec) => spec.data_width() as u32,
-                _ => self.metadata.bit_width,
+            if let Ok(spec) = self.field_spec(field) {
+                spec.data_width() as u32
+            } else {
+                self.metadata.bit_width
             }
         } else {
             self.metadata.bit_width

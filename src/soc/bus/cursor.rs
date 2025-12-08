@@ -13,13 +13,13 @@ use std::sync::Arc;
 use crate::soc::{
     bus::{
         DeviceBus,
-        softmmu::{MMUFlags, SoftMMU},
+        softmmu::{AddressMode, MMUFlags, SoftMMU},
         softtlb::SoftTLB,
     },
     device::AccessContext,
 };
 
-use super::error::BusResult;
+use super::error::{BusError, BusResult};
 
 pub struct BusCursor {
     tlb: SoftTLB,
@@ -37,9 +37,26 @@ impl BusCursor {
     }
 
     pub fn attach_to_bus(bus: Arc<DeviceBus>, start: usize, context: AccessContext) -> Self {
-        let mmu = SoftMMU::new(bus);
-        let tlb = SoftTLB::new(Arc::new(mmu), context);
+        Self::attach_to_bus_with_mode(bus, start, context, AddressMode::Physical)
+    }
+
+    pub fn attach_to_bus_with_mode(
+        bus: Arc<DeviceBus>,
+        start: usize,
+        context: AccessContext,
+        mode: AddressMode,
+    ) -> Self {
+        let mmu = SoftMMU::with_mode(bus, mode);
+        let tlb = SoftTLB::new(mmu, context);
         Self::new(tlb, start)
+    }
+
+    pub fn set_address_mode(&mut self, mode: AddressMode) {
+        self.tlb.set_address_mode(mode);
+    }
+
+    pub fn address_mode(&self) -> AddressMode {
+        self.tlb.address_mode()
     }
 
     #[inline(always)]
@@ -80,7 +97,11 @@ impl BusCursor {
 
     #[inline(always)]
     pub fn backward_from_ref(&mut self, delta: usize) -> BusResult<&mut Self> {
-        self.goto(self.ref_zero.saturating_sub(delta))
+        let target = self
+            .ref_zero
+            .checked_sub(delta)
+            .ok_or(BusError::InvalidAddress { address: 0 })?;
+        self.goto(target)
     }
 
     #[inline(always)]
@@ -99,7 +120,11 @@ impl BusCursor {
 
     #[inline(always)]
     pub fn backward(&mut self, delta: usize) -> BusResult<&mut Self> {
-        self.goto(self.address.saturating_sub(delta))
+        let target = self
+            .address
+            .checked_sub(delta)
+            .ok_or(BusError::InvalidAddress { address: 0 })?;
+        self.goto(target)
     }
 
     #[inline(always)]
@@ -269,21 +294,24 @@ impl BusCursor {
 mod tests {
     use std::sync::Arc;
 
-    use crate::soc::bus::{BusCursor, DeviceBus, SoftMMU, SoftTLB};
+    use crate::soc::bus::{BusCursor, DeviceBus};
     use crate::soc::device::{AccessContext, Endianness, RamMemory};
 
-    fn make_bus() -> DeviceBus {
+    fn make_bus_at(map_start: usize) -> DeviceBus {
         let mut bus = DeviceBus::new(32);
         let memory = RamMemory::new("ram", 0x2000, Endianness::Little);
-        bus.map_device(memory, 0x1000, 0).expect("map device");
+        bus.map_device(memory, map_start, 0)
+            .expect("map device");
         bus
     }
 
+    fn make_cursor_from(map_start: usize, start: usize) -> BusCursor {
+        let bus = Arc::new(make_bus_at(map_start));
+        BusCursor::attach_to_bus(bus, start, AccessContext::CPU)
+    }
+
     fn make_cursor() -> BusCursor {
-        let bus = make_bus();
-        let mmu = SoftMMU::new(Arc::new(bus));
-        let tlb = SoftTLB::new(Arc::new(mmu), AccessContext::CPU);
-        BusCursor::new(tlb, 0x1000)
+        make_cursor_from(0x1000, 0x1000)
     }
 
     #[test]
@@ -365,7 +393,7 @@ mod tests {
 
     #[test]
     fn move_relative_ref() {
-        let mut cursor = make_cursor();
+        let mut cursor = make_cursor_from(0, 0);
         cursor.set_ref(0x20).unwrap();
         // Positive deltas move the cursor forward, but enormous negatives are rejected.
         assert!(

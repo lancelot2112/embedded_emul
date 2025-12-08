@@ -2,8 +2,8 @@
 
 use super::aggregate::{AggregateKind, AggregateType};
 use super::arena::{StringId, TypeId};
+use super::arena_record::{ArenaSpan, LayoutSize, MemberRecord};
 use super::expr::{EvalContext, ExprProgram};
-use super::record::{LayoutSize, MemberRecord, MemberSpan};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DynamicField {
@@ -52,7 +52,7 @@ impl DynamicAggregate {
             offset_bits += total_bits;
         }
 
-        let span = MemberSpan::new(0, members.len());
+        let span = ArenaSpan::new(0, members.len());
         let layout = LayoutSize {
             bytes: offset_bits / 8,
             trailing_bits: (offset_bits % 8),
@@ -68,8 +68,8 @@ mod tests {
     //! Validates that dynamic aggregates correctly evaluate expressions for layout decisions.
     use super::*;
     use crate::soc::prog::types::arena::{TypeArena, TypeId};
+    use crate::soc::prog::types::arena_record::TypeRecord;
     use crate::soc::prog::types::expr::{EvalContext, OpCode};
-    use crate::soc::prog::types::record::TypeRecord;
     use crate::soc::prog::types::scalar::{DisplayFormat, ScalarEncoding, ScalarType};
 
     struct StaticContext;

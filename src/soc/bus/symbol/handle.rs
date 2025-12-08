@@ -13,12 +13,12 @@ use super::size::type_size;
 use super::value::{SymbolAccessError, SymbolValue};
 
 /// Computes typed values for symbols by combining the symbol table with a live device bus reads.
-pub struct SymbolHandle<'a> {
+pub struct SymbolBus<'a> {
     pub(super) table: &'a SymbolTable,
     pub(super) cursor: &'a mut BusCursor,
 }
 
-impl<'a> SymbolHandle<'a> {
+impl<'a> SymbolBus<'a> {
     pub fn new(table: &'a SymbolTable, cursor: &'a mut BusCursor) -> Self {
         Self { table, cursor }
     }
@@ -59,12 +59,7 @@ impl<'a> SymbolHandle<'a> {
         symbol: TableSymbolHandle,
     ) -> Result<SymbolValue, SymbolAccessError> {
         let snapshot = self.prepare(symbol)?;
-        let arena = self.table.type_arena();
-        if let Some(value) = self.interpret_value(arena.as_ref(), &snapshot)? {
-            return Ok(value);
-        }
-        let bytes = self.read_bytes(&snapshot)?;
-        Ok(SymbolValue::Bytes(bytes))
+        SymbolBus::read_snapshot_value(self.table, &mut self.cursor, &snapshot)
     }
 
     pub fn read_raw_bytes(
@@ -106,30 +101,51 @@ impl<'a> SymbolHandle<'a> {
         Ok(buf)
     }
 
-    fn interpret_value(
-        &mut self,
-        arena: &TypeArena,
+    fn read_typed_value(
+        table: &SymbolTable,
+        cursor: &mut BusCursor,
         snapshot: &Snapshot,
     ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         let Some(type_id) = snapshot.record.type_id else {
             return Ok(None);
         };
-        self.interpret_type_at(arena, type_id, snapshot.address, Some(snapshot.size))
+        let arena = table.type_arena();
+        Self::interpret_type_at(
+            cursor,
+            arena.as_ref(),
+            type_id,
+            snapshot.address,
+            Some(snapshot.size),
+        )
+    }
+
+    fn read_snapshot_value(
+        table: &SymbolTable,
+        cursor: &mut BusCursor,
+        snapshot: &Snapshot,
+    ) -> Result<SymbolValue, SymbolAccessError> {
+        if let Some(value) = Self::read_typed_value(table, cursor, snapshot)? {
+            return Ok(value);
+        }
+        cursor.goto(snapshot.address)?;
+        let bytes = cursor.read_ram(snapshot.size as usize)?.to_vec();
+        Ok(SymbolValue::Bytes(bytes))
     }
 
     pub(super) fn interpret_type_at(
-        &mut self,
+        cursor: &mut BusCursor,
         arena: &TypeArena,
         type_id: TypeId,
         address: usize,
         size_hint: Option<usize>,
     ) -> Result<Option<SymbolValue>, SymbolAccessError> {
         let record = arena.get(type_id);
-        let mut ctx = ReadContext::new(&mut self.cursor, arena, None, address, address, size_hint);
+        let mut ctx = ReadContext::new(cursor, arena, address, size_hint, 0);
         read_type_record(record, &mut ctx)
     }
 }
 
+#[derive(Clone)]
 pub(super) struct Snapshot {
     pub record: SymbolRecord,
     pub address: usize,

@@ -3,13 +3,13 @@
 use crate::soc::bus::BusError;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SymbolValue<'a> {
+pub enum SymbolValue {
     Unsigned(u64),
     Signed(i64),
     Float(f64),
     Utf8(String),
     Enum { label: Option<String>, value: i64 },
-    Bytes(&'a [u8]),
+    Bytes(Vec<u8>),
 }
 
 #[derive(Debug)]

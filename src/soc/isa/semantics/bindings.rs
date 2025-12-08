@@ -12,7 +12,6 @@ use crate::soc::isa::error::IsaError;
 use crate::soc::isa::machine::FormInfo;
 use crate::soc::isa::semantics::value::SemanticValue;
 use crate::soc::prog::types::BitFieldSpec;
-use crate::soc::prog::types::scalar::ScalarStorage;
 
 #[derive(Debug, Clone)]
 pub struct OperandBinder {
@@ -172,7 +171,14 @@ mod tests {
     use crate::soc::isa::machine::{FieldEncoding, FormInfo, OperandKind};
     use crate::soc::prog::types::BitFieldSpec;
 
-    fn subfield(name: &str, store_bitw: u16, offset: u16, width: u16, signed: bool, kind: OperandKind) -> FieldEncoding {
+    fn subfield(
+        name: &str,
+        store_bitw: u16,
+        offset: u16,
+        width: u16,
+        signed: bool,
+        kind: OperandKind,
+    ) -> FieldEncoding {
         let spec = BitFieldSpec::builder(store_bitw)
             .range(offset, width)
             .signed(signed)
@@ -198,7 +204,7 @@ mod tests {
         let mut form = FormInfo::new("X_FORM".into());
         form.push_field(subfield("RT", 32, 0, 5, false, OperandKind::Register));
         form.push_field(subfield("RA", 32, 5, 5, false, OperandKind::Register));
-        form.push_field(subfield("IMM",32, 10, 16, true, OperandKind::Immediate));
+        form.push_field(subfield("IMM", 32, 10, 16, true, OperandKind::Immediate));
 
         let binder = OperandBinder::from_form(&form, &[]).expect("binder");
         assert_eq!(binder.len(), 3);

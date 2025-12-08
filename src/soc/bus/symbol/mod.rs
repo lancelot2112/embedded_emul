@@ -8,7 +8,7 @@ mod size;
 mod value;
 
 pub use cursor::{SymbolValueCursor, SymbolWalkRead};
-pub use handle::SymbolHandle;
+pub use handle::SymbolBus;
 pub use value::{SymbolAccessError, SymbolValue};
 
 #[cfg(test)]

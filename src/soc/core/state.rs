@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::soc::bus::ext::BitsCursorExt;
 use crate::soc::bus::{BusCursor, BusError, DeviceBus};
 use crate::soc::core::specification::{CoreSpec, RegisterSpec};
 use crate::soc::device::{AccessContext, RamMemory};
@@ -72,8 +73,8 @@ impl CoreState {
         bit_len: u16,
     ) -> StateResult<u64> {
         self.cursor.goto(byte_offset)?;
-        let value = 0; //TODO: self.cursor.read_bits(bit_offset, bit_len)?;
-        Ok(value)
+        let value = self.cursor.read_bits(bit_offset, bit_len as usize)?;
+        Ok(value as u64)
     }
 
     pub fn write_bits_at(
@@ -84,7 +85,9 @@ impl CoreState {
         value: u64,
     ) -> StateResult<()> {
         self.cursor.goto(byte_offset)?;
-        //TODO: self.cursor.write_bits(bit_offset, bit_len, value)?;
+        let masked = mask_to_width(value, bit_len);
+        self.cursor
+            .write_bits(bit_offset, bit_len as usize, masked as u128)?;
         Ok(())
     }
 
@@ -177,6 +180,17 @@ fn narrow_bit_len(name: &str, bits: u32) -> StateResult<u16> {
         register: name.to_string(),
         bits,
     })
+}
+
+fn mask_to_width(value: u64, width: u16) -> u64 {
+    if width == 0 {
+        0
+    } else if width >= 64 {
+        value
+    } else {
+        let mask = (1u64 << width) - 1;
+        value & mask
+    }
 }
 
 #[cfg(test)]

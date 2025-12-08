@@ -1,12 +1,13 @@
 //! Defines the canonical record structures stored inside the type arena.
-
 use super::aggregate::AggregateType;
 use super::arena::{StringId, TypeId};
 use super::bitfield::BitFieldSpec;
 use super::callable::CallableType;
 use super::dynamic::DynamicAggregate;
+use super::enum_scalar::EnumType;
 use super::pointer::PointerType;
-use super::scalar::{EnumType, FixedScalar, ScalarType};
+use super::scalar::{FixedScalar, ScalarType};
+use super::scalar_with_fields::ScalarWithFieldsRecord;
 use super::sequence::SequenceType;
 
 /// Compact representation of the byte size and trailing bit padding of a layout.
@@ -27,14 +28,14 @@ impl LayoutSize {
     }
 }
 
-/// Describes a contiguous slice of members stored inside the arena side table.
+/// Describes a contiguous slice of members or fields stored inside the arena side table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MemberSpan {
+pub struct ArenaSpan {
     start: u32,
     len: u32,
 }
 
-impl MemberSpan {
+impl ArenaSpan {
     pub fn empty() -> Self {
         Self { start: 0, len: 0 }
     }
@@ -60,12 +61,14 @@ impl MemberSpan {
 }
 
 /// POD metadata for a single aggregate member.
+/// Stored in TypeArena member pool to avoid type data growing onto the heap.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemberRecord {
     pub name_id: Option<StringId>,
     pub ty: TypeId,
-    pub offset_bits: usize,
+    pub offset_bits: usize, // from start of parent aggregate
     pub bit_size: Option<usize>,
+    pub fields: Option<ArenaSpan>,
 }
 
 impl MemberRecord {
@@ -75,12 +78,29 @@ impl MemberRecord {
             ty,
             offset_bits,
             bit_size: None,
+            fields: None,
         }
     }
 
-    pub fn with_bitfield(mut self, bit_size: u16) -> Self {
-        self.bit_size = Some(bit_size as usize);
+    pub fn with_fields(mut self, span: ArenaSpan) -> Self {
+        self.fields = Some(span);
         self
+    }
+
+    pub fn set_fields(&mut self, span: ArenaSpan) {
+        self.fields = Some(span);
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FieldRecord {
+    pub name_id: StringId,
+    pub ty: TypeId,
+}
+
+impl FieldRecord {
+    pub fn new(name_id: StringId, ty: TypeId) -> Self {
+        Self { name_id, ty }
     }
 }
 
@@ -104,6 +124,7 @@ pub enum TypeRecord {
     Callable(CallableType),
     Dynamic(DynamicAggregate),
     Opaque(OpaqueType),
+    ScalarWithFields(ScalarWithFieldsRecord),
 }
 
 impl TypeRecord {
@@ -130,7 +151,7 @@ mod tests {
     #[test]
     fn span_construction_tracks_length() {
         // ensure MemberSpan::new stores the requested bounds verbatim
-        let span = MemberSpan::new(4, 2);
+        let span = ArenaSpan::new(4, 2);
         assert_eq!(
             span.start(),
             4,
@@ -140,15 +161,19 @@ mod tests {
     }
 
     #[test]
-    fn member_record_supports_bitfields() {
-        // verify with_bitfield flips the optional bit size as expected
+    fn member_record_attaches_field_spans() {
+        // verify members can attach field spans allocated in the arena
         let mut arena = TypeArena::new();
         let scalar_id = dummy_scalar(&mut arena);
-        let record = MemberRecord::new(None, scalar_id, 0).with_bitfield(3);
-        assert_eq!(
-            record.bit_size,
-            Some(3),
-            "bit size should be set to three bits"
-        );
+        let bit_spec = BitFieldSpec::from_range(32, 0, 3);
+        let bitfield_id = arena.push_record(TypeRecord::BitField(bit_spec));
+        let name_id = arena.intern_string("field");
+        let span = arena.alloc_fields([FieldRecord::new(name_id, bitfield_id)]);
+        let record = MemberRecord::new(None, scalar_id, 0).with_fields(span);
+
+        let fields = arena.fields(record.fields.expect("field span missing"));
+        assert_eq!(fields.len(), 1, "member should expose one field span entry");
+        assert_eq!(fields[0].name_id, name_id, "field name should match");
+        assert_eq!(fields[0].ty, bitfield_id, "field type should match");
     }
 }
