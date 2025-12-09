@@ -26,6 +26,9 @@ subfields={
 //!endif
 }
 
+:reg OTHER offset=0x800 subfields={
+    reserved @(64)
+}
 //Special Purpose Registers
 
 //First define the entire SPR space
@@ -123,7 +126,7 @@ subfields={
     DE @(54) descr="Debug interrupt enable"
     IS @(58) descr="Instruction address space"
     DS @(59) descr="Data address space"
-    RI @(62) descr="Recoverable interrupt"
+    RI @(63) descr="Recoverable interrupt"
 }
 
 :reg BUCSR size=64 reset=0

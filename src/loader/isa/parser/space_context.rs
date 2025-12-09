@@ -6,7 +6,10 @@ use crate::soc::isa::error::IsaError;
 use crate::soc::isa::semantics::SemanticBlock;
 use crate::soc::prog::types::parse_u64_literal;
 
-use super::{Parser, Token, TokenKind, spans::span_from_tokens};
+use super::{
+    Parser, Token, TokenKind,
+    spans::{span_from_token, span_from_tokens},
+};
 
 pub(super) fn parse_space_context_directive(
     parser: &mut Parser,
@@ -215,12 +218,15 @@ fn parse_mask_block(parser: &mut Parser) -> Result<MaskSpec, IsaError> {
         let selector = parse_mask_selector(parser)?;
         parser.expect(TokenKind::Equals, "'=' after mask field name")?;
         let value = parser.expect(TokenKind::Number, "numeric literal for mask value")?;
+        let literal_span = span_from_token(parser.file_path(), &value);
         let parsed = parse_u64_literal(&value.lexeme).map_err(|err| {
             IsaError::Parser(format!("invalid mask literal '{}': {err}", value.lexeme))
         })?;
         fields.push(MaskField {
             selector,
             value: parsed,
+            value_text: Some(value.lexeme),
+            value_span: Some(literal_span),
         });
         if parser.check(TokenKind::Comma)? {
             parser.consume()?;
@@ -432,13 +438,23 @@ fn parse_index_range(token: &Token) -> Result<FieldIndexRange, IsaError> {
 }
 
 fn parse_context_reference(parser: &mut Parser) -> Result<ContextReference, IsaError> {
-    let mut segments = Vec::new();
-    segments.push(parser.expect_identifier("context reference segment")?);
+    let first = parser.expect_identifier_token("context reference segment")?;
+    let mut last = first.clone();
+    let mut segments = vec![first.lexeme.clone()];
+    let mut segment_spans = vec![span_from_token(parser.file_path(), &first)];
     while parser.check(TokenKind::DoubleColon)? {
         parser.consume()?;
-        segments.push(parser.expect_identifier("context reference segment")?);
+        let token = parser.expect_identifier_token("context reference segment")?;
+        last = token.clone();
+        segment_spans.push(span_from_token(parser.file_path(), &token));
+        segments.push(token.lexeme);
     }
-    Ok(ContextReference { segments })
+    let span = span_from_tokens(parser.file_path(), &first, &last);
+    Ok(ContextReference {
+        segments,
+        segment_spans,
+        span,
+    })
 }
 
 fn parse_subfields_block(parser: &mut Parser) -> Result<Vec<SubFieldDecl>, IsaError> {
@@ -492,11 +508,13 @@ fn parse_subfields_block(parser: &mut Parser) -> Result<Vec<SubFieldDecl>, IsaEr
             }
         }
 
+        let bit_spec_span = span_from_token(parser.file_path(), &bit_spec);
         entries.push(SubFieldDecl {
             name,
             bit_spec: bit_spec.lexeme,
             operations,
             description,
+            bit_spec_span: Some(bit_spec_span),
         });
     }
     Ok(entries)

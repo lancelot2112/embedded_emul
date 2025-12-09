@@ -24,6 +24,7 @@ pub struct Validator {
     space_states: BTreeMap<String, SpaceState>,
     logic_states: BTreeMap<String, LogicSpaceState>,
     space_kinds: BTreeMap<String, SpaceKind>,
+    space_word_sizes: BTreeMap<String, u32>,
     logic_sizes: BTreeMap<String, u32>,
     space_enables: BTreeSet<String>,
     diagnostics: Vec<IsaDiagnostic>,
@@ -120,5 +121,23 @@ impl Validator {
 
     fn logic_state(&mut self, space: &str) -> Option<&mut LogicSpaceState> {
         self.logic_states.get_mut(space)
+    }
+}
+
+pub(super) fn literal_bit_width(value: u64) -> u32 {
+    if value == 0 {
+        1
+    } else {
+        u64::BITS - value.leading_zeros()
+    }
+}
+
+pub(super) fn max_value_for_width(bits: u32) -> u64 {
+    if bits == 0 {
+        0
+    } else if bits >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << bits) - 1
     }
 }

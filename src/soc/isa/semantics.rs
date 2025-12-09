@@ -91,9 +91,16 @@ impl SemanticBlock {
 
 #[derive(Debug, Clone)]
 pub enum SemanticExpr {
-    Literal(u64),
+    Literal {
+        value: u64,
+        text: String,
+        span: SourceSpan,
+    },
     Identifier(String),
-    BitExpr(String),
+    BitExpr {
+        spec: String,
+        span: SourceSpan,
+    },
     BinaryOp {
         op: BinaryOperator,
         lhs: Box<SemanticExpr>,

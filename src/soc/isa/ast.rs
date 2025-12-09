@@ -119,6 +119,8 @@ pub struct FieldIndexRange {
 #[derive(Debug, Clone)]
 pub struct ContextReference {
     pub segments: Vec<String>,
+    pub segment_spans: Vec<SourceSpan>,
+    pub span: SourceSpan,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +129,7 @@ pub struct SubFieldDecl {
     pub bit_spec: String,
     pub operations: Vec<SubFieldOp>,
     pub description: Option<String>,
+    pub bit_spec_span: Option<SourceSpan>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +176,8 @@ pub enum MaskSelector {
 pub struct MaskField {
     pub selector: MaskSelector,
     pub value: u64,
+    pub value_text: Option<String>,
+    pub value_span: Option<SourceSpan>,
 }
 
 #[derive(Debug, Clone)]

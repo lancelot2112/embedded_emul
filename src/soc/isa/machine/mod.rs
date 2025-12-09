@@ -223,6 +223,7 @@ mod tests {
                     bit_spec: "@(0..3)".into(),
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "DST".into(),
@@ -232,6 +233,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
             ],
         );
@@ -274,6 +276,7 @@ mod tests {
                     bit_spec: "@(0..1)".into(),
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "RT".into(),
@@ -283,6 +286,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "RA".into(),
@@ -292,6 +296,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "RB".into(),
@@ -301,6 +306,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
             ],
         );
@@ -347,6 +353,7 @@ mod tests {
             bit_spec: "@(0..15)".into(),
             operations: Vec::new(),
             description: None,
+            bit_spec_span: None,
         }];
         registers.insert("GPR".into(), gpr);
         let space = SpaceInfo {
@@ -415,12 +422,14 @@ mod tests {
                     bit_spec: "@(0..3)".into(),
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "SIMM".into(),
                     bit_spec: "@(4..15)".into(),
                     operations: vec![subfield_op("immediate", None::<&str>)],
                     description: None,
+                    bit_spec_span: None,
                 },
             ],
         );
@@ -459,6 +468,7 @@ mod tests {
                     bit_spec: "@(0..1)".into(),
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "RT".into(),
@@ -468,6 +478,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "RA".into(),
@@ -477,6 +488,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
                 SubFieldDecl {
                     name: "RB".into(),
@@ -486,6 +498,7 @@ mod tests {
                         subfield_op("reg", Some("GPR")),
                     ],
                     description: None,
+                    bit_spec_span: None,
                 },
             ],
         );

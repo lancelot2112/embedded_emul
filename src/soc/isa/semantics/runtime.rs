@@ -1064,6 +1064,7 @@ mod tests {
                         bit_spec: "@(0..1)".into(),
                         operations: Vec::new(),
                         description: None,
+                        bit_spec_span: None,
                     }],
                     span: span.clone(),
                     display: None,
@@ -1081,6 +1082,8 @@ mod tests {
                     description: None,
                     redirect: Some(ContextReference {
                         segments: vec!["GPR0".into()],
+                        segment_spans: vec![span.clone()],
+                        span: span.clone(),
                     }),
                     subfields: Vec::new(),
                     span: span.clone(),

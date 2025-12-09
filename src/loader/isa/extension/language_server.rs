@@ -18,6 +18,7 @@ use crate::loader::isa::lexer::{Lexer, Token, TokenKind};
 use crate::loader::isa::parse_str;
 use crate::soc::isa::diagnostic::{DiagnosticLevel, IsaDiagnostic, SourceSpan};
 use crate::soc::isa::error::IsaError;
+use crate::soc::isa::validator::Validator;
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["isa", "isaext", "coredef", "sysdef"];
 const DIRECTIVE_KEYWORDS: &[&str] = &[
@@ -145,10 +146,18 @@ impl IsaLanguageServer {
         if !Self::is_supported_uri(uri) {
             return Vec::new();
         }
-        match parse_str(Self::path_from_uri(uri), text) {
+        match Self::parse_and_validate(Self::path_from_uri(uri), text) {
             Ok(_) => Vec::new(),
             Err(err) => Self::diagnostics_from_error(uri, err),
         }
+    }
+
+    fn parse_and_validate(path: PathBuf, text: &str) -> Result<(), IsaError> {
+        let doc = parse_str(path, text)?;
+        let docs = vec![doc];
+        let mut validator = Validator::new();
+        validator.validate(&docs)?;
+        Ok(())
     }
 
     fn diagnostics_from_error(uri: &Url, err: IsaError) -> Vec<Diagnostic> {
@@ -670,6 +679,7 @@ pub async fn run_stdio_language_server() -> LspResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
     use tower_lsp::lsp_types::Url;
 
     #[test]
@@ -726,6 +736,23 @@ mod tests {
 
         assert_token(&captured, "32", HighlightKind::Number);
         assert_token(&captured, "64", HighlightKind::Number);
+    }
+
+    #[test]
+    fn reports_validation_errors_for_invalid_redirect() {
+        let text = ":space reg addr=32 word=64 type=register\n:reg alias redirect=PC";
+        let err = IsaLanguageServer::parse_and_validate(PathBuf::from("test.isa"), text)
+            .expect_err("expected redirect validation error");
+        match err {
+            IsaError::Diagnostics { diagnostics, .. } => {
+                assert!(
+                    diagnostics
+                        .iter()
+                        .any(|diag| diag.code == "validation.redirect.unknown-field")
+                );
+            }
+            other => panic!("unexpected error variant: {:?}", other),
+        }
     }
 
     struct CapturedToken {

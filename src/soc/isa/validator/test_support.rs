@@ -91,5 +91,6 @@ pub(super) fn simple_subfield(name: &str) -> SubFieldDecl {
         bit_spec: "@(0..5)".to_string(),
         operations: Vec::new(),
         description: None,
+        bit_spec_span: None,
     }
 }

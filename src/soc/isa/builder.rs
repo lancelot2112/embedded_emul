@@ -172,7 +172,12 @@ impl<'a> InstructionBuilder<'a> {
             .decl
             .mask
             .get_or_insert(MaskSpec { fields: Vec::new() });
-        mask.fields.push(MaskField { selector, value });
+        mask.fields.push(MaskField {
+            selector,
+            value,
+            value_text: None,
+            value_span: None,
+        });
         self
     }
 
@@ -208,6 +213,7 @@ pub fn subfield(name: impl Into<String>, bit_spec: impl Into<String>) -> SubFiel
         bit_spec: bit_spec.into(),
         operations: Vec::new(),
         description: None,
+        bit_spec_span: None,
     }
 }
 

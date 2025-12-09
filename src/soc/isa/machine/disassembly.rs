@@ -412,7 +412,7 @@ enum EnableExpr {
 impl EnableExpr {
     fn compile(expr: SemanticExpr, word_bits: u32, space: &str) -> Result<Self, IsaError> {
         match expr {
-            SemanticExpr::Literal(value) => Ok(Self::Literal(value)),
+            SemanticExpr::Literal { value, .. } => Ok(Self::Literal(value)),
             SemanticExpr::Identifier(name) => match name.to_ascii_lowercase().as_str() {
                 "true" => Ok(Self::Bool(true)),
                 "false" => Ok(Self::Bool(false)),
@@ -420,7 +420,7 @@ impl EnableExpr {
                     "identifier '{other}' is not supported in enbl expression for space '{space}'",
                 ))),
             },
-            SemanticExpr::BitExpr(spec) => {
+            SemanticExpr::BitExpr { spec, .. } => {
                 let parsed = parse_bit_spec(word_bits, &spec).map_err(|err| {
                     IsaError::Machine(format!(
                         "invalid bit selector '{spec}' in enbl expression for space '{space}': {err}",

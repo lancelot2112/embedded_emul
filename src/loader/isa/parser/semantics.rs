@@ -2,7 +2,7 @@ use crate::soc::isa::error::IsaError;
 use crate::soc::isa::semantics::{BinaryOperator, SemanticExpr};
 use crate::soc::prog::types::parse_u64_literal;
 
-use super::{Parser, TokenKind};
+use super::{Parser, TokenKind, spans::span_from_token};
 
 pub(crate) fn parse_semantic_expr_block(
     parser: &mut Parser,
@@ -91,17 +91,27 @@ fn parse_primary_expr(parser: &mut Parser) -> Result<SemanticExpr, IsaError> {
     }
     if parser.check(TokenKind::BitExpr)? {
         let token = parser.consume()?;
-        return Ok(SemanticExpr::BitExpr(token.lexeme));
+        let span = span_from_token(parser.file_path(), &token);
+        return Ok(SemanticExpr::BitExpr {
+            spec: token.lexeme,
+            span,
+        });
     }
     if parser.check(TokenKind::Number)? {
         let token = parser.consume()?;
-        let value = parse_u64_literal(&token.lexeme).map_err(|err| {
+        let span = span_from_token(parser.file_path(), &token);
+        let literal = token.lexeme.clone();
+        let value = parse_u64_literal(&literal).map_err(|err| {
             IsaError::Parser(format!(
                 "invalid numeric literal '{}' in semantic expression: {err}",
                 token.lexeme
             ))
         })?;
-        return Ok(SemanticExpr::Literal(value));
+        return Ok(SemanticExpr::Literal {
+            value,
+            text: literal,
+            span,
+        });
     }
     if parser.check(TokenKind::Identifier)? {
         let token = parser.consume()?;

@@ -1,5 +1,6 @@
 use super::Validator;
 use crate::soc::isa::ast::{FormDecl, SpaceKind};
+use crate::soc::isa::machine::parse_bit_spec;
 use crate::soc::isa::logic::LogicFormError;
 
 impl Validator {
@@ -28,6 +29,10 @@ impl Validator {
                 );
                 return;
             }
+        }
+
+        if let Some(bits) = self.space_word_sizes.get(&form.space).copied() {
+            self.ensure_form_subfields_within_bounds(form, bits);
         }
 
         let Some(state) = self.logic_state(&form.space) else {
@@ -69,6 +74,25 @@ impl Validator {
             ),
         }
     }
+
+    fn ensure_form_subfields_within_bounds(&mut self, form: &FormDecl, word_bits: u32) {
+        for sub in &form.subfields {
+            if let Err(err) = parse_bit_spec(word_bits, &sub.bit_spec) {
+                let span = sub
+                    .bit_spec_span
+                    .clone()
+                    .or_else(|| Some(form.span.clone()));
+                self.push_validation_diagnostic(
+                    "validation.form.subfield-bit-range",
+                    format!(
+                        "subfield '{}' bit spec {} exceeds {}-bit logic word for form '{}': {err}",
+                        sub.name, sub.bit_spec, word_bits, form.name
+                    ),
+                    span,
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -83,6 +107,15 @@ mod tests {
         )
         .unwrap_err();
         expect_validation_diag(err, "parent form 'UNKNOWN'");
+    }
+
+    #[test]
+    fn logic_form_subfield_respects_word_size() {
+        let err = validate_src(
+            ":space logic addr=32 word=16 type=logic\n:logic FORM subfields={\n    OK @(0)\n    BAD @(16)\n}",
+        )
+        .unwrap_err();
+        expect_validation_diag(err, "subfield 'BAD' bit spec");
     }
 
     #[test]
