@@ -36,17 +36,38 @@
         "description": "Named spaces or registers declared after directives"
       },
       {
+        "id": "nanemuEntity",
+        "description": "Register, instruction, and macro names"
+      },
+      {
         "id": "nanemuOption",
         "description": "Option keys and assignment operators (option=)"
+      },
+      {
+        "id": "nanemuOptionValue",
+        "description": "Enumeration option values such as type=logic or endian=big"
       }
     ],
     "semanticTokenColors": {
       "comment": "#6A8F6A",
       "string": "#FF8F6B",
-      "number": "#FFFFFF",
+      "number": "#b5cea8",
       "nanemuDirective": "#7FA6D9",
       "nanemuSpace": "#C792EA",
-      "nanemuOption": "#F2CC81"
+      "nanemuEntity": "#89DDFF",
+      "nanemuOption": "#F2CC81",
+      "nanemuOptionValue": "#b5cea8"
+    },
+    "configurationDefaults": {
+      "editor.semanticTokenColorCustomizations": {
+        "rules": {
+          "nanemuDirective": "#7FA6D9",
+          "nanemuSpace": "#C792EA",
+          "nanemuEntity": "#89DDFF",
+          "nanemuOption": "#F2CC81",
+          "nanemuOptionValue": "#b5cea8"
+        }
+      }
     },
     "configuration": {
       "title": "Nanemu ISA Language Server",

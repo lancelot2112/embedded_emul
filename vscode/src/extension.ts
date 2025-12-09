@@ -11,6 +11,9 @@ let client: LanguageClient | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   const serverOptions = buildServerOptions(context);
+  const traceOutputChannel = vscode.window.createOutputChannel(
+    "Nanemu ISA Trace",
+  );
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
       { scheme: "file", language: "nanemu-isa" },
@@ -21,6 +24,8 @@ export function activate(context: vscode.ExtensionContext): void {
         "**/*.{isa,isaext,coredef,sysdef}",
       ),
     },
+    outputChannelName: "Nanemu ISA Language Server",
+    traceOutputChannel,
   };
 
   client = new LanguageClient(
@@ -29,6 +34,7 @@ export function activate(context: vscode.ExtensionContext): void {
     serverOptions,
     clientOptions,
   );
+  client.registerProposedFeatures();
   client.start();
   context.subscriptions.push(client);
 }

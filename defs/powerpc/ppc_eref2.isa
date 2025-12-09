@@ -145,7 +145,7 @@ subfields={
 
 // XO-Form: Inherited from X-Form with overflow enable
 :insn::X_Form XO_Form subfields={
-    OE @(21) op=func descr="Overflow enable"
+    OE @(21) op=func descr="Overflow enable" 
     // Note: OE overlaps with XO @(21..30) - this generates a warning
     // but both fields coexist for different instruction variants
 } disp="#RT, #RA, #RB"

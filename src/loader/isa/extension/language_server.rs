@@ -44,7 +44,9 @@ const SEMANTIC_TOKEN_TYPES: &[&str] = &[
     "number",
     "nanemuDirective",
     "nanemuSpace",
+    "nanemuEntity",
     "nanemuOption",
+    "nanemuOptionValue",
 ];
 
 #[derive(Clone)]
@@ -60,7 +62,9 @@ enum HighlightKind {
     Number,
     Directive,
     Space,
+    Entity,
     Option,
+    OptionValue,
 }
 
 impl HighlightKind {
@@ -71,7 +75,9 @@ impl HighlightKind {
             HighlightKind::Number => 2,
             HighlightKind::Directive => 3,
             HighlightKind::Space => 4,
-            HighlightKind::Option => 5,
+            HighlightKind::Entity => 5,
+            HighlightKind::Option => 6,
+            HighlightKind::OptionValue => 7,
         }
     }
 }
@@ -81,6 +87,12 @@ struct HighlightSpan {
     start: u32,
     length: u32,
     kind: HighlightKind,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum NameKind {
+    Space,
+    Entity,
 }
 
 /// Minimal LSP backend that surfaces parser diagnostics for ISA family documents.
@@ -241,59 +253,95 @@ impl IsaLanguageServer {
         let tokens = Self::collect_tokens(uri, text);
         let mut option_idents = HashSet::new();
         let mut option_equals = HashSet::new();
+        let mut option_values = HashSet::new();
         for idx in 0..tokens.len().saturating_sub(1) {
             if tokens[idx].kind == TokenKind::Identifier
                 && tokens[idx + 1].kind == TokenKind::Equals
             {
                 option_idents.insert(idx);
                 option_equals.insert(idx + 1);
+                if idx + 2 < tokens.len() && tokens[idx + 2].kind == TokenKind::Identifier {
+                    option_values.insert(idx + 2);
+                }
             }
         }
 
         let mut line_cache: Option<Vec<Vec<char>>> = None;
         let mut expect_directive = false;
-        let mut expect_named_entity = false;
-        let mut expect_chained_name = false;
+        let mut expect_name: Option<NameKind> = None;
+        let mut expect_chained_name: Option<NameKind> = None;
+        let mut last_name_kind: Option<NameKind> = None;
 
         for (idx, token) in tokens.iter().enumerate() {
             match token.kind {
                 TokenKind::EOF => break,
                 TokenKind::Colon => {
                     expect_directive = true;
-                    expect_chained_name = false;
+                    expect_chained_name = None;
                 }
                 TokenKind::DoubleColon => {
-                    expect_chained_name = true;
+                    expect_chained_name = last_name_kind;
                 }
                 TokenKind::Identifier => {
                     if expect_directive {
                         let lower = token.lexeme.to_ascii_lowercase();
                         if DIRECTIVE_KEYWORDS.contains(&lower.as_str()) {
+                            if lower == "space" {
+                                spans.push(Self::span_from_token(
+                                    token,
+                                    HighlightKind::Space,
+                                    None,
+                                ));
+                                expect_name = Some(NameKind::Space);
+                            } else {
+                                spans.push(Self::span_from_token(
+                                    token,
+                                    HighlightKind::Directive,
+                                    None,
+                                ));
+                                if NAMED_DIRECTIVES.contains(&lower.as_str()) {
+                                    expect_name = Some(NameKind::Entity);
+                                } else {
+                                    expect_name = None;
+                                }
+                            }
+                        } else {
                             spans.push(Self::span_from_token(
                                 token,
                                 HighlightKind::Directive,
                                 None,
                             ));
-                            expect_named_entity = NAMED_DIRECTIVES.contains(&lower.as_str());
-                        } else {
-                            spans.push(Self::span_from_token(token, HighlightKind::Space, None));
-                            expect_named_entity = false;
+                            expect_name = None;
                         }
                         expect_directive = false;
-                        expect_chained_name = false;
-                    } else if expect_chained_name {
-                        spans.push(Self::span_from_token(token, HighlightKind::Space, None));
-                        expect_chained_name = false;
-                        expect_named_entity = false;
-                    } else if expect_named_entity {
-                        spans.push(Self::span_from_token(token, HighlightKind::Space, None));
-                        expect_named_entity = false;
+                        expect_chained_name = None;
+                        last_name_kind = None;
+                    } else if let Some(kind) =
+                        expect_chained_name.take().or_else(|| expect_name.take())
+                    {
+                        let highlight_kind = match kind {
+                            NameKind::Space => HighlightKind::Space,
+                            NameKind::Entity => HighlightKind::Entity,
+                        };
+                        spans.push(Self::span_from_token(token, highlight_kind, None));
+                        last_name_kind = Some(kind);
                     } else if option_idents.contains(&idx) {
                         spans.push(Self::span_from_token(token, HighlightKind::Option, None));
+                        last_name_kind = None;
+                    } else if option_values.contains(&idx) {
+                        spans.push(Self::span_from_token(
+                            token,
+                            HighlightKind::OptionValue,
+                            None,
+                        ));
+                        last_name_kind = None;
+                    } else {
+                        last_name_kind = None;
                     }
                 }
                 TokenKind::Number => {
                     spans.push(Self::span_from_token(token, HighlightKind::Number, None));
+                    last_name_kind = None;
                 }
                 TokenKind::String => {
                     if line_cache.is_none() {
@@ -311,11 +359,13 @@ impl IsaLanguageServer {
                         HighlightKind::String,
                         length_override,
                     ));
+                    last_name_kind = None;
                 }
                 TokenKind::Equals => {
                     if option_equals.contains(&idx) {
                         spans.push(Self::span_from_token(token, HighlightKind::Option, None));
                     }
+                    last_name_kind = None;
                 }
                 _ => {}
             }
@@ -633,7 +683,7 @@ mod tests {
         let tokens = IsaLanguageServer::build_semantic_tokens_for_text(&uri, text);
         let captured = capture_tokens(text, &tokens);
 
-        assert_token(&captured, "space", HighlightKind::Directive);
+        assert_token(&captured, "space", HighlightKind::Space);
         assert_token(&captured, "core0", HighlightKind::Space);
         assert_token(&captured, "option", HighlightKind::Option);
         assert_token(&captured, "=", HighlightKind::Option);
@@ -651,11 +701,31 @@ mod tests {
         let captured = capture_tokens(text, &tokens);
 
         assert_token(&captured, "insn", HighlightKind::Directive);
-        assert_token(&captured, "add", HighlightKind::Space);
-        assert_token(&captured, "core0", HighlightKind::Space);
-        assert_token(&captured, "stage0", HighlightKind::Space);
+        assert_token(&captured, "add", HighlightKind::Entity);
+        assert_token(&captured, "core0", HighlightKind::Entity);
+        assert_token(&captured, "stage0", HighlightKind::Entity);
         assert_token(&captured, "reg", HighlightKind::Directive);
-        assert_token(&captured, "sample", HighlightKind::Space);
+        assert_token(&captured, "sample", HighlightKind::Entity);
+    }
+
+    #[test]
+    fn highlights_option_values() {
+        let uri = Url::parse("file:///test3.isa").unwrap();
+        let text = ":space reg addr=32 word=64 type=register align=16 endian=big";
+
+        let tokens = IsaLanguageServer::build_semantic_tokens_for_text(&uri, text);
+        let captured = capture_tokens(text, &tokens);
+
+        for key in ["addr", "word", "type", "align", "endian"] {
+            assert_token(&captured, key, HighlightKind::Option);
+        }
+
+        for value in ["register", "big"] {
+            assert_token(&captured, value, HighlightKind::OptionValue);
+        }
+
+        assert_token(&captured, "32", HighlightKind::Number);
+        assert_token(&captured, "64", HighlightKind::Number);
     }
 
     struct CapturedToken {
