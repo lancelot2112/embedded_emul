@@ -48,6 +48,8 @@ const SEMANTIC_TOKEN_TYPES: &[&str] = &[
     "nanemuEntity",
     "nanemuOption",
     "nanemuOptionValue",
+    "nanemuNamespace",
+    "nanemuField",
 ];
 
 #[derive(Clone)]
@@ -66,6 +68,8 @@ enum HighlightKind {
     Entity,
     Option,
     OptionValue,
+    Namespace,
+    Field,
 }
 
 impl HighlightKind {
@@ -79,6 +83,8 @@ impl HighlightKind {
             HighlightKind::Entity => 5,
             HighlightKind::Option => 6,
             HighlightKind::OptionValue => 7,
+            HighlightKind::Namespace => 8,
+            HighlightKind::Field => 9,
         }
     }
 }
@@ -94,6 +100,37 @@ struct HighlightSpan {
 enum NameKind {
     Space,
     Entity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IdentifierState {
+    Idle,
+    ExpectDirective,
+    ExpectName(NameKind),
+    ExpectChained(NameKind),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RedirectState {
+    Inactive,
+    AwaitEquals,
+    AwaitValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReferenceState {
+    Inactive,
+    AwaitingMember,
+}
+
+impl ReferenceState {
+    fn from_chain(has_chain: bool) -> Self {
+        if has_chain {
+            ReferenceState::AwaitingMember
+        } else {
+            ReferenceState::Inactive
+        }
+    }
 }
 
 /// Minimal LSP backend that surfaces parser diagnostics for ISA family documents.
@@ -276,81 +313,143 @@ impl IsaLanguageServer {
         }
 
         let mut line_cache: Option<Vec<Vec<char>>> = None;
-        let mut expect_directive = false;
-        let mut expect_name: Option<NameKind> = None;
-        let mut expect_chained_name: Option<NameKind> = None;
+        let mut identifier_state = IdentifierState::Idle;
+        let mut redirect_state = RedirectState::Inactive;
+        let mut reference_state = ReferenceState::Inactive;
         let mut last_name_kind: Option<NameKind> = None;
 
         for (idx, token) in tokens.iter().enumerate() {
             match token.kind {
                 TokenKind::EOF => break,
                 TokenKind::Colon => {
-                    expect_directive = true;
-                    expect_chained_name = None;
+                    identifier_state = IdentifierState::ExpectDirective;
+                    reference_state = ReferenceState::Inactive;
+                    redirect_state = RedirectState::Inactive;
+                    last_name_kind = None;
                 }
                 TokenKind::DoubleColon => {
-                    expect_chained_name = last_name_kind;
+                    if let Some(kind) = last_name_kind {
+                        identifier_state = IdentifierState::ExpectChained(kind);
+                    }
+                    redirect_state = RedirectState::Inactive;
                 }
                 TokenKind::Identifier => {
-                    if expect_directive {
-                        let lower = token.lexeme.to_ascii_lowercase();
-                        if DIRECTIVE_KEYWORDS.contains(&lower.as_str()) {
-                            if lower == "space" {
-                                spans.push(Self::span_from_token(
-                                    token,
-                                    HighlightKind::Space,
-                                    None,
-                                ));
-                                expect_name = Some(NameKind::Space);
+                    let handled = match identifier_state {
+                        IdentifierState::ExpectDirective => {
+                            let lower = token.lexeme.to_ascii_lowercase();
+                            if DIRECTIVE_KEYWORDS.contains(&lower.as_str()) {
+                                if lower == "space" {
+                                    spans.push(Self::span_from_token(
+                                        token,
+                                        HighlightKind::Space,
+                                        None,
+                                    ));
+                                    identifier_state = IdentifierState::ExpectName(NameKind::Space);
+                                } else {
+                                    spans.push(Self::span_from_token(
+                                        token,
+                                        HighlightKind::Directive,
+                                        None,
+                                    ));
+                                    if NAMED_DIRECTIVES.contains(&lower.as_str()) {
+                                        identifier_state = IdentifierState::ExpectName(NameKind::Entity);
+                                    } else {
+                                        identifier_state = IdentifierState::Idle;
+                                    }
+                                }
                             } else {
                                 spans.push(Self::span_from_token(
                                     token,
                                     HighlightKind::Directive,
                                     None,
                                 ));
-                                if NAMED_DIRECTIVES.contains(&lower.as_str()) {
-                                    expect_name = Some(NameKind::Entity);
-                                } else {
-                                    expect_name = None;
-                                }
+                                identifier_state = IdentifierState::Idle;
                             }
-                        } else {
+                            last_name_kind = None;
+                            reference_state = ReferenceState::Inactive;
+                            true
+                        }
+                        IdentifierState::ExpectName(kind)
+                        | IdentifierState::ExpectChained(kind) => {
+                            let highlight_kind = match kind {
+                                NameKind::Space => HighlightKind::Space,
+                                NameKind::Entity => HighlightKind::Entity,
+                            };
+                            spans.push(Self::span_from_token(token, highlight_kind, None));
+                            last_name_kind = Some(kind);
+                            identifier_state = IdentifierState::Idle;
+                            reference_state = ReferenceState::Inactive;
+                            true
+                        }
+                        IdentifierState::Idle => false,
+                    };
+
+                    if !handled {
+                        if option_idents.contains(&idx) {
+                            spans.push(Self::span_from_token(token, HighlightKind::Option, None));
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                            reference_state = ReferenceState::Inactive;
+                        } else if option_values.contains(&idx) {
                             spans.push(Self::span_from_token(
                                 token,
-                                HighlightKind::Directive,
+                                HighlightKind::OptionValue,
                                 None,
                             ));
-                            expect_name = None;
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                            reference_state = ReferenceState::Inactive;
+                        } else if reference_state == ReferenceState::AwaitingMember {
+                            spans.push(Self::span_from_token(token, HighlightKind::Field, None));
+                            reference_state = ReferenceState::from_chain(
+                                Self::has_following_double_colon(&tokens, idx),
+                            );
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                        } else if redirect_state == RedirectState::AwaitValue {
+                            spans.push(Self::span_from_token(token, HighlightKind::Field, None));
+                            reference_state = ReferenceState::from_chain(
+                                Self::has_following_double_colon(&tokens, idx),
+                            );
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                        } else if Self::is_reference_namespace(token, &tokens, idx) {
+                            spans.push(Self::span_from_token(token, HighlightKind::Namespace, None));
+                            reference_state = ReferenceState::from_chain(
+                                Self::has_following_double_colon(&tokens, idx),
+                            );
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                        } else if Self::is_reference_root(&tokens, idx) {
+                            spans.push(Self::span_from_token(token, HighlightKind::Field, None));
+                            reference_state = ReferenceState::from_chain(
+                                Self::has_following_double_colon(&tokens, idx),
+                            );
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                        } else if Self::is_subfield_declaration(&tokens, idx) {
+                            spans.push(Self::span_from_token(token, HighlightKind::Field, None));
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                            reference_state = ReferenceState::Inactive;
+                        } else {
+                            last_name_kind = None;
+                            identifier_state = IdentifierState::Idle;
+                            reference_state = ReferenceState::Inactive;
                         }
-                        expect_directive = false;
-                        expect_chained_name = None;
-                        last_name_kind = None;
-                    } else if let Some(kind) =
-                        expect_chained_name.take().or_else(|| expect_name.take())
-                    {
-                        let highlight_kind = match kind {
-                            NameKind::Space => HighlightKind::Space,
-                            NameKind::Entity => HighlightKind::Entity,
-                        };
-                        spans.push(Self::span_from_token(token, highlight_kind, None));
-                        last_name_kind = Some(kind);
-                    } else if option_idents.contains(&idx) {
-                        spans.push(Self::span_from_token(token, HighlightKind::Option, None));
-                        last_name_kind = None;
-                    } else if option_values.contains(&idx) {
-                        spans.push(Self::span_from_token(
-                            token,
-                            HighlightKind::OptionValue,
-                            None,
-                        ));
-                        last_name_kind = None;
+                    }
+                    if token.lexeme.eq_ignore_ascii_case("redirect") {
+                        redirect_state = RedirectState::AwaitEquals;
                     } else {
-                        last_name_kind = None;
+                        redirect_state = RedirectState::Inactive;
                     }
                 }
                 TokenKind::Number => {
                     spans.push(Self::span_from_token(token, HighlightKind::Number, None));
                     last_name_kind = None;
+                    identifier_state = IdentifierState::Idle;
+                    reference_state = ReferenceState::Inactive;
+                    redirect_state = RedirectState::Inactive;
                 }
                 TokenKind::String => {
                     if line_cache.is_none() {
@@ -369,12 +468,30 @@ impl IsaLanguageServer {
                         length_override,
                     ));
                     last_name_kind = None;
+                    identifier_state = IdentifierState::Idle;
+                    reference_state = ReferenceState::Inactive;
+                    redirect_state = RedirectState::Inactive;
                 }
                 TokenKind::Equals => {
                     if option_equals.contains(&idx) {
                         spans.push(Self::span_from_token(token, HighlightKind::Option, None));
                     }
                     last_name_kind = None;
+                    reference_state = ReferenceState::Inactive;
+                    identifier_state = IdentifierState::Idle;
+                    redirect_state = if matches!(redirect_state, RedirectState::AwaitEquals) {
+                        RedirectState::AwaitValue
+                    } else {
+                        RedirectState::Inactive
+                    };
+                }
+                TokenKind::LBrace | TokenKind::RBrace | TokenKind::LParen | TokenKind::RParen
+                | TokenKind::Comma | TokenKind::Semicolon => {
+                    if !matches!(token.kind, TokenKind::Comma) {
+                        reference_state = ReferenceState::Inactive;
+                    }
+                    identifier_state = IdentifierState::Idle;
+                    redirect_state = RedirectState::Inactive;
                 }
                 _ => {}
             }
@@ -419,6 +536,34 @@ impl IsaLanguageServer {
             length: length.max(1),
             kind,
         }
+    }
+
+    fn has_following_double_colon(tokens: &[Token], idx: usize) -> bool {
+        tokens
+            .get(idx + 1)
+            .map(|next| matches!(next.kind, TokenKind::DoubleColon))
+            .unwrap_or(false)
+    }
+
+    fn is_reference_namespace(token: &Token, tokens: &[Token], idx: usize) -> bool {
+        token.lexeme.starts_with('$') && Self::has_following_double_colon(tokens, idx)
+    }
+
+    fn is_reference_root(tokens: &[Token], idx: usize) -> bool {
+        if !Self::has_following_double_colon(tokens, idx) {
+            return false;
+        }
+        if idx == 0 {
+            return true;
+        }
+        !matches!(tokens[idx - 1].kind, TokenKind::Colon | TokenKind::DoubleColon)
+    }
+
+    fn is_subfield_declaration(tokens: &[Token], idx: usize) -> bool {
+        tokens
+            .get(idx + 1)
+            .map(|next| matches!(next.kind, TokenKind::BitExpr))
+            .unwrap_or(false)
     }
 
     fn collect_line_chars(text: &str) -> Vec<Vec<char>> {

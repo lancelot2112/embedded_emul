@@ -46,6 +46,14 @@
       {
         "id": "nanemuOptionValue",
         "description": "Enumeration option values such as type=logic or endian=big"
+      },
+      {
+        "id": "nanemuNamespace",
+        "description": "Context prefixes such as $reg or $insn"
+      },
+      {
+        "id": "nanemuField",
+        "description": "Field and subfield names in forms, masks, or redirects"
       }
     ],
     "semanticTokenColors": {
@@ -56,16 +64,20 @@
       "nanemuSpace": "#C792EA",
       "nanemuEntity": "#89DDFF",
       "nanemuOption": "#F2CC81",
-      "nanemuOptionValue": "#b5cea8"
+      "nanemuOptionValue": "#b5cea8",
+      "nanemuNamespace": "#7A5FF4",
+      "nanemuField": "#4CB9DD"
     },
     "configurationDefaults": {
       "editor.semanticTokenColorCustomizations": {
         "rules": {
           "nanemuDirective": "#7FA6D9",
-          "nanemuSpace": "#C792EA",
+          "nanemuSpace": "#7FA6D9",
           "nanemuEntity": "#89DDFF",
           "nanemuOption": "#F2CC81",
-          "nanemuOptionValue": "#b5cea8"
+          "nanemuOptionValue": "#b5cea8",
+          "nanemuNamespace": "#7FA6D9",
+          "nanemuField": "#89DDFF"
         }
       }
     },

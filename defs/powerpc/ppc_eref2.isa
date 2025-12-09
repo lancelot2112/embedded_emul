@@ -26,9 +26,6 @@ subfields={
 //!endif
 }
 
-:reg OTHER offset=0x800 subfields={
-    reserved @(64)
-}
 //Special Purpose Registers
 
 //First define the entire SPR space
