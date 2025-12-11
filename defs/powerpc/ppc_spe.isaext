@@ -81,17 +81,10 @@
 
 // --- Representative EVX instructions (SPEPEM Rev.0 Table B-1) ---
 :insn::EVX_Form            brinc     mask={OPCD=4, XO=0b01000001111}
-
 :insn::EVX_Form            evaddw    mask={OPCD=4, XO=0b01000000000} descr="Vector add word"
-
 :insn::EVX_CRF_D_Form      evcmpeq  (CRFD, RA, RB) mask={OPCD=4, XO=0b01000110100, RD_PAD=0} descr="Vector compare equal"
-
 :insn::EVX_CRF_D_Form      evfststeq (CRFD, RA, RB) mask={OPCD=4, XO=0b01010011110, RD_PAD=0} descr="Vector float test equal"
-
 :insn::EVX_UimmBx8_Form    evldd     mask={OPCD=4, XO=0b01100000001} descr="Load doubleword with UIMM<<3 byte offset"
-
-:insn::EVX_RS_UimmBx8_Form evstdw  (RS, RA, UIMM) mask={OPCD=4, XO=0b01100100011} descr="Store doubleword with UIMM<<3 byte offset"
-
+:insn::EVX_RS_UimmBx8_Form evstdw  (RS, RA, UIMM) mask={OPCD=4, XO=0b01100100011} descr="Store doubleword with UIMM<<3 byte offset" 
 :insn::EVX_SimmA_Form      evsplati (RD, SIMM) mask={OPCD=4, XO=0b01000101001, RB=0} descr="Vector splat signed immediate" disp="#RD, #SIMM"
-
 :insn::EVX_CRFS_Form       evsel   (RD, RA, RB, CRFS) mask={OPCD=4, XO=0b01001111} descr="Vector select based on crfS"
