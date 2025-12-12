@@ -200,6 +200,7 @@ mod tests {
     use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
     use crate::soc::isa::machine::{encode_constant, parse_bit_spec};
     use crate::soc::isa::semantics::SemanticBlock;
+    use crate::soc::prog::types::bitfield::BitOrder;
     use std::path::PathBuf;
 
     #[test]
@@ -224,6 +225,7 @@ mod tests {
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "DST".into(),
@@ -234,6 +236,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
             ],
         );
@@ -277,6 +280,7 @@ mod tests {
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "RT".into(),
@@ -287,6 +291,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "RA".into(),
@@ -297,6 +302,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "RB".into(),
@@ -307,6 +313,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
             ],
         );
@@ -354,6 +361,7 @@ mod tests {
             operations: Vec::new(),
             description: None,
             bit_spec_span: None,
+            bit_order: BitOrder::Msb0,
         }];
         registers.insert("GPR".into(), gpr);
         let space = SpaceInfo {
@@ -423,6 +431,7 @@ mod tests {
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "SIMM".into(),
@@ -430,6 +439,7 @@ mod tests {
                     operations: vec![subfield_op("immediate", None::<&str>)],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
             ],
         );
@@ -469,6 +479,7 @@ mod tests {
                     operations: vec![subfield_op("func", None::<&str>)],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "RT".into(),
@@ -479,6 +490,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "RA".into(),
@@ -489,6 +501,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
                 SubFieldDecl {
                     name: "RB".into(),
@@ -499,6 +512,7 @@ mod tests {
                     ],
                     description: None,
                     bit_spec_span: None,
+                    bit_order: BitOrder::Msb0,
                 },
             ],
         );
@@ -545,8 +559,8 @@ mod tests {
 
     #[test]
     fn xo_masks_overlap() {
-        let xo = parse_bit_spec(32, "@(21..30)").expect("xo spec");
-        let oe = parse_bit_spec(32, "@(21)").expect("oe spec");
+        let xo = parse_bit_spec(32, "@(21..30)", BitOrder::Msb0).expect("xo spec");
+        let oe = parse_bit_spec(32, "@(21)", BitOrder::Msb0).expect("oe spec");
         let (xo_mask, xo_bits) = encode_constant(&xo, 266).expect("xo encode");
         let (oe_mask, oe_bits) = encode_constant(&oe, 1).expect("oe encode");
         // PowerPC addo encodings set OE separately even though it's part of XO.

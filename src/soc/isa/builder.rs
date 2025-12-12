@@ -10,6 +10,7 @@ use crate::soc::isa::ast::{
     ParameterDecl, ParameterValue, SpaceAttribute, SpaceDecl, SpaceKind, SpaceMember,
     SpaceMemberDecl, SubFieldDecl, SubFieldOp,
 };
+use crate::soc::prog::types::bitfield::BitOrder;
 use crate::soc::isa::diagnostic::{SourcePosition, SourceSpan};
 
 /// Convenience wrapper for assembling a full ISA document in memory.
@@ -17,6 +18,7 @@ pub struct IsaBuilder {
     path: PathBuf,
     span: SourceSpan,
     items: Vec<IsaItem>,
+    bit_order: BitOrder,
 }
 
 impl IsaBuilder {
@@ -28,7 +30,14 @@ impl IsaBuilder {
             path,
             span,
             items: Vec::new(),
+            bit_order: BitOrder::Msb0,
         }
+    }
+
+    /// Sets the document-wide bit numbering scheme.
+    pub fn set_bit_order(&mut self, order: BitOrder) -> &mut Self {
+        self.bit_order = order;
+        self
     }
 
     /// Appends a top-level parameter declaration.
@@ -81,7 +90,10 @@ impl IsaBuilder {
     ) -> &mut Self {
         let space = space.into();
         let name = name.into();
-        let subfields: Vec<SubFieldDecl> = subfields.into_iter().collect();
+        let mut subfields: Vec<SubFieldDecl> = subfields.into_iter().collect();
+        for sub in &mut subfields {
+            sub.bit_order = self.bit_order;
+        }
         let form_decl = FormDecl {
             space: space.clone(),
             name,
@@ -133,7 +145,9 @@ impl IsaBuilder {
 
     /// Finishes building and returns the assembled document.
     pub fn build(self) -> IsaSpecification {
-        IsaSpecification::new(self.path, self.items, Vec::new())
+        let mut spec = IsaSpecification::new(self.path, self.items, Vec::new());
+        spec.bit_order = self.bit_order;
+        spec
     }
 }
 
@@ -177,6 +191,7 @@ impl<'a> InstructionBuilder<'a> {
             value,
             value_text: None,
             value_span: None,
+            bit_order: self.builder.bit_order,
         });
         self
     }
@@ -214,6 +229,7 @@ pub fn subfield(name: impl Into<String>, bit_spec: impl Into<String>) -> SubFiel
         operations: Vec::new(),
         description: None,
         bit_spec_span: None,
+        bit_order: BitOrder::Msb0,
     }
 }
 

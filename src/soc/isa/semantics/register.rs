@@ -490,6 +490,7 @@ mod tests {
     use crate::soc::isa::error::IsaError;
     use crate::soc::isa::machine::MachineDescription;
     use crate::soc::isa::semantics::program::RegisterRef;
+    use crate::soc::prog::types::bitfield::BitOrder;
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -738,6 +739,7 @@ mod tests {
                         operations: Vec::new(),
                         description: None,
                         bit_spec_span: None,
+                        bit_order: BitOrder::Msb0,
                     }],
                     span: span.clone(),
                     display: None,
@@ -761,6 +763,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Less Than".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                         SubFieldDecl {
                             name: "NEG".into(),
@@ -768,6 +771,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Negative".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                         SubFieldDecl {
                             name: "GT".into(),
@@ -775,6 +779,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Greater Than".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                         SubFieldDecl {
                             name: "POS".into(),
@@ -782,6 +787,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Positive".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                         SubFieldDecl {
                             name: "EQ".into(),
@@ -789,6 +795,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Equal".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                         SubFieldDecl {
                             name: "ZERO".into(),
@@ -796,6 +803,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Zero".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                         SubFieldDecl {
                             name: "SO".into(),
@@ -803,6 +811,7 @@ mod tests {
                             operations: Vec::new(),
                             description: Some("Summary Overflow".into()),
                             bit_spec_span: None,
+                            bit_order: BitOrder::Msb0,
                         },
                     ],
                     span: span.clone(),
@@ -830,6 +839,7 @@ mod tests {
                         operations: Vec::new(),
                         description: None,
                         bit_spec_span: None,
+                        bit_order: BitOrder::Msb0,
                     }],
                     span: span.clone(),
                     display: None,

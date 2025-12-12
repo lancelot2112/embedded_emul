@@ -268,12 +268,13 @@ impl MachineDescription {
         for field in &mask_spec.fields {
             let spec = match &field.selector {
                 MaskSelector::Field(name) => self.resolve_form_field(instr, space, name)?,
-                MaskSelector::BitExpr(expr) => parse_bit_spec(word_bits, expr).map_err(|err| {
-                    IsaError::Machine(format!(
-                        "invalid bit expression '{expr}' in instruction '{}': {err}",
-                        instr.name
-                    ))
-                })?,
+                MaskSelector::BitExpr(expr) => parse_bit_spec(word_bits, expr, field.bit_order)
+                    .map_err(|err| {
+                        IsaError::Machine(format!(
+                            "invalid bit expression '{expr}' in instruction '{}': {err}",
+                            instr.name
+                        ))
+                    })?,
             };
             let (field_mask, encoded) = encode_constant(&spec, field.value).map_err(|err| {
                 IsaError::Machine(format!(
@@ -420,8 +421,12 @@ impl EnableExpr {
                     "identifier '{other}' is not supported in enbl expression for space '{space}'",
                 ))),
             },
-            SemanticExpr::BitExpr { spec, .. } => {
-                let parsed = parse_bit_spec(word_bits, &spec).map_err(|err| {
+            SemanticExpr::BitExpr {
+                spec,
+                bit_order,
+                ..
+            } => {
+                let parsed = parse_bit_spec(word_bits, &spec, bit_order).map_err(|err| {
                     IsaError::Machine(format!(
                         "invalid bit selector '{spec}' in enbl expression for space '{space}': {err}",
                     ))

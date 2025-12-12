@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use crate::soc::device::endianness::Endianness;
 use crate::soc::isa::diagnostic::SourceSpan;
-use crate::soc::prog::types::bitfield::BitFieldSpec;
+use crate::soc::prog::types::bitfield::{BitFieldSpec, BitOrder};
 
 use super::semantics::{SemanticBlock, SemanticExpr};
 
@@ -14,11 +14,17 @@ pub struct IsaSpecification {
     pub path: PathBuf,
     pub items: Vec<IsaItem>,
     pub extends: Vec<PathBuf>,
+    pub bit_order: BitOrder,
 }
 
 impl IsaSpecification {
     pub fn new(path: PathBuf, items: Vec<IsaItem>, extends: Vec<PathBuf>) -> Self {
-        Self { path, items, extends }
+        Self {
+            path,
+            items,
+            extends,
+            bit_order: BitOrder::Msb0,
+        }
     }
 }
 
@@ -131,6 +137,7 @@ pub struct SubFieldDecl {
     pub operations: Vec<SubFieldOp>,
     pub description: Option<String>,
     pub bit_spec_span: Option<SourceSpan>,
+    pub bit_order: BitOrder,
 }
 
 #[derive(Debug, Clone)]
@@ -179,6 +186,7 @@ pub struct MaskField {
     pub value: u64,
     pub value_text: Option<String>,
     pub value_span: Option<SourceSpan>,
+    pub bit_order: BitOrder,
 }
 
 #[derive(Debug, Clone)]

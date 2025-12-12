@@ -95,6 +95,7 @@ fn parse_primary_expr(parser: &mut Parser) -> Result<SemanticExpr, IsaError> {
         return Ok(SemanticExpr::BitExpr {
             spec: token.lexeme,
             span,
+            bit_order: parser.bit_order(),
         });
     }
     if parser.check(TokenKind::Number)? {

@@ -9,6 +9,21 @@ use super::scalar::ScalarStorage;
 
 const MAX_BITFIELD_BITS: u16 = 64;
 
+/// Controls how textual bit ranges map to physical container offsets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BitOrder {
+    /// Bit 0 refers to the most significant bit, matching historic nanemu behavior.
+    Msb0,
+    /// Bit 0 refers to the least significant bit, mirroring most hardware datasheets.
+    Lsb0,
+}
+
+impl Default for BitOrder {
+    fn default() -> Self {
+        BitOrder::Msb0
+    }
+}
+
 #[inline(always)]
 fn mask_for_width(width: u16) -> u64 {
     1u64.unbounded_shl(width as u32).wrapping_sub(1)
@@ -147,9 +162,13 @@ impl BitFieldSpec {
             .finish()
     }
 
-    /// Parses an ISA-style bit spec string (e.g. `@(16..29|0b00)`), assuming MSB-zero numbering
-    /// for ranges as described in the language specification.
-    pub fn from_spec_str(store_bitw: u16, spec: &str) -> Result<Self, BitFieldError> {
+    /// Parses an ISA-style bit spec string (e.g. `@(16..29|0b00)`), normalizing either MSB-zero
+    /// or LSB-zero numbering as configured by `order`.
+    pub fn from_spec_str(
+        store_bitw: u16,
+        spec: &str,
+        order: BitOrder,
+    ) -> Result<Self, BitFieldError> {
         if store_bitw == 0 || store_bitw > MAX_BITFIELD_BITS {
             return Err(BitFieldError::ContainerTooWide { bits: store_bitw });
         }
@@ -190,7 +209,7 @@ impl BitFieldSpec {
                     segments.push(BitFieldSegment::Literal { value, width });
                 }
                 SegmentToken::Range { start, end } => {
-                    let (offset, width) = msb_range_to_lsb_offset(start, end, store_bitw)?;
+                    let (offset, width) = range_to_lsb_offset(start, end, store_bitw, order)?;
                     let slice = BitSlice::new(offset, width)?;
                     segments.push(BitFieldSegment::Slice(slice));
                 }
@@ -768,12 +787,13 @@ fn parse_range(token: &str) -> Result<(u16, u16), BitFieldError> {
         if start.trim().is_empty() || end.trim().is_empty() {
             return Err(BitFieldError::InvalidToken(trimmed.to_string()));
         }
-        let start = parse_number(start.trim())?;
-        let end = parse_number(end.trim())?;
-        if end < start {
-            return Err(BitFieldError::InvalidToken(trimmed.to_string()));
-        }
-        Ok((start, end))
+        let first = parse_number(start.trim())?;
+        let second = parse_number(end.trim())?;
+        Ok(if first <= second {
+            (first, second)
+        } else {
+            (second, first)
+        })
     } else {
         let bit = parse_number(trimmed)?;
         Ok((bit, bit))
@@ -796,6 +816,18 @@ fn parse_number(token: &str) -> Result<u16, BitFieldError> {
     value.map_err(|_| BitFieldError::InvalidNumber(token.to_string()))
 }
 
+fn range_to_lsb_offset(
+    start: u16,
+    end: u16,
+    container_bits: u16,
+    order: BitOrder,
+) -> Result<(u16, u16), BitFieldError> {
+    match order {
+        BitOrder::Msb0 => msb_range_to_lsb_offset(start, end, container_bits),
+        BitOrder::Lsb0 => lsb_range_to_lsb_offset(start, end, container_bits),
+    }
+}
+
 fn msb_range_to_lsb_offset(
     start: u16,
     end: u16,
@@ -810,6 +842,21 @@ fn msb_range_to_lsb_offset(
     let width = end - start + 1;
     let lsb_offset = container_bits - 1 - end;
     Ok((lsb_offset, width))
+}
+
+fn lsb_range_to_lsb_offset(
+    start: u16,
+    end: u16,
+    container_bits: u16,
+) -> Result<(u16, u16), BitFieldError> {
+    if end >= container_bits {
+        return Err(BitFieldError::SliceOutOfRange {
+            offset: start,
+            width: end - start + 1,
+        });
+    }
+    let width = end - start + 1;
+    Ok((start, width))
 }
 
 #[cfg(test)]
@@ -884,7 +931,8 @@ mod tests {
 
     #[test]
     fn parses_spec_with_literals_and_pad() {
-        let spec = BitFieldSpec::from_spec_str(32, "@(16..29|0b00)").expect("spec parse");
+        let spec = BitFieldSpec::from_spec_str(32, "@(16..29|0b00)", BitOrder::Msb0)
+            .expect("spec parse");
         assert_eq!(
             spec.data_width(),
             16,
@@ -898,7 +946,8 @@ mod tests {
 
     #[test]
     fn parses_sign_pad_spec() {
-        let spec = BitFieldSpec::from_spec_str(32, "@(?1|16..29|0b00)").expect("spec parse");
+        let spec = BitFieldSpec::from_spec_str(32, "@(?1|16..29|0b00)", BitOrder::Msb0)
+            .expect("spec parse");
         assert!(
             matches!(
                 spec.pad,

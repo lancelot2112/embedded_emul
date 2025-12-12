@@ -54,13 +54,17 @@ impl MachineDescription {
             for field in &mask.fields {
                 let spec = match &field.selector {
                     MaskSelector::Field(name) => resolve_form_field(instr, space, name)?,
-                    MaskSelector::BitExpr(expr) => super::space::parse_bit_spec(word_bits, expr)
-                        .map_err(|err| {
-                            IsaError::Machine(format!(
-                                "invalid bit selector '{expr}' on instruction '{}': {err}",
-                                instr.name
-                            ))
-                        })?,
+                    MaskSelector::BitExpr(expr) => super::space::parse_bit_spec(
+                        word_bits,
+                        expr,
+                        field.bit_order,
+                    )
+                    .map_err(|err| {
+                        IsaError::Machine(format!(
+                            "invalid bit selector '{expr}' on instruction '{}': {err}",
+                            instr.name
+                        ))
+                    })?,
                 };
                 let (field_mask, encoded) = encode_constant(&spec, field.value).map_err(|err| {
                     IsaError::Machine(format!(

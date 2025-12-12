@@ -77,7 +77,7 @@ impl Validator {
 
     fn ensure_form_subfields_within_bounds(&mut self, form: &FormDecl, word_bits: u32) {
         for sub in &form.subfields {
-            if let Err(err) = parse_bit_spec(word_bits, &sub.bit_spec) {
+            if let Err(err) = parse_bit_spec(word_bits, &sub.bit_spec, sub.bit_order) {
                 let span = sub
                     .bit_spec_span
                     .clone()

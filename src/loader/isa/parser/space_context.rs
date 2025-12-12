@@ -227,6 +227,7 @@ fn parse_mask_block(parser: &mut Parser) -> Result<MaskSpec, IsaError> {
             value: parsed,
             value_text: Some(value.lexeme),
             value_span: Some(literal_span),
+            bit_order: parser.bit_order(),
         });
         if parser.check(TokenKind::Comma)? {
             parser.consume()?;
@@ -515,6 +516,7 @@ fn parse_subfields_block(parser: &mut Parser) -> Result<Vec<SubFieldDecl>, IsaEr
             operations,
             description,
             bit_spec_span: Some(bit_spec_span),
+            bit_order: parser.bit_order(),
         });
     }
     Ok(entries)

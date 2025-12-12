@@ -5,15 +5,16 @@ use super::{
     Parser, TokenKind, parameters::parse_parameter_decl, space::parse_space_directive,
     space_context::parse_space_context_directive,
 };
-use crate::soc::isa::ast::{IncludeDecl, IsaItem, MacroDecl};
+use crate::soc::isa::ast::{IncludeDecl, IsaItem, MacroDecl, ParameterValue};
 use crate::soc::isa::error::IsaError;
+use crate::soc::prog::types::bitfield::BitOrder;
 
 impl<'src> Parser<'src> {
     pub(super) fn parse_directive(&mut self) -> Result<Option<IsaItem>, IsaError> {
         self.expect(TokenKind::Colon, "directive introducer ':'")?;
         let name = self.expect_identifier("directive name")?;
         let item = match name.as_str() {
-            "fileset" => self.parse_fileset_directive().map(Some),
+            "fileset" => self.parse_fileset_directive(),
             "param" => self.parse_param_directive().map(Some),
             "space" => parse_space_directive(self).map(Some),
             "include" => self.parse_include_directive().map(Some),
@@ -34,9 +35,29 @@ impl<'src> Parser<'src> {
         Ok(item)
     }
 
-    fn parse_fileset_directive(&mut self) -> Result<IsaItem, IsaError> {
+    fn parse_fileset_directive(&mut self) -> Result<Option<IsaItem>, IsaError> {
         let decl = parse_parameter_decl(self, "fileset parameter name")?;
-        Ok(IsaItem::Parameter(decl))
+        if decl.name.eq_ignore_ascii_case("BITORDER") {
+            let ParameterValue::Word(value) = &decl.value else {
+                return Err(IsaError::Parser(
+                    ":fileset BITORDER must use a word literal (MSB0/LSB0)".into(),
+                ));
+            };
+            let upper = value.to_ascii_uppercase();
+            let order = match upper.as_str() {
+                "MSB0" => BitOrder::Msb0,
+                "LSB0" => BitOrder::Lsb0,
+                other => {
+                    return Err(IsaError::Parser(format!(
+                        "unknown BITORDER value '{other}': expected MSB0 or LSB0"
+                    )))
+                }
+            };
+            self.set_bit_order(order);
+            Ok(None)
+        } else {
+            Ok(Some(IsaItem::Parameter(decl)))
+        }
     }
 
     fn parse_param_directive(&mut self) -> Result<IsaItem, IsaError> {

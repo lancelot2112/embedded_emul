@@ -649,6 +649,7 @@ mod tests {
         SemanticStmt,
     };
     use crate::soc::isa::semantics::value::SemanticValue;
+    use crate::soc::prog::types::bitfield::BitOrder;
     use std::collections::HashMap;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -1065,6 +1066,7 @@ mod tests {
                         operations: Vec::new(),
                         description: None,
                         bit_spec_span: None,
+                        bit_order: BitOrder::Msb0,
                     }],
                     span: span.clone(),
                     display: None,

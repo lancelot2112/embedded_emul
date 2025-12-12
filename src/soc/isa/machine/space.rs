@@ -6,7 +6,11 @@ use std::collections::BTreeMap;
 use crate::soc::device::endianness::Endianness;
 use crate::soc::isa::ast::{FieldDecl, FormDecl, SpaceAttribute, SpaceDecl, SpaceKind, SubFieldOp};
 use crate::soc::isa::error::IsaError;
-use crate::soc::prog::types::{BitFieldSegment, BitFieldSpec, bitfield::BitFieldError};
+use crate::soc::prog::types::{
+    bitfield::{BitFieldError, BitOrder},
+    BitFieldSegment,
+    BitFieldSpec,
+};
 
 use super::register::{RegisterBinding, RegisterInfo, derive_register_binding};
 
@@ -72,7 +76,7 @@ impl SpaceInfo {
                     self.name, form.name, sub.name
                 )));
             }
-            let spec = parse_bit_spec(word_bits, &sub.bit_spec).map_err(|err| {
+            let spec = parse_bit_spec(word_bits, &sub.bit_spec, sub.bit_order).map_err(|err| {
                 IsaError::Machine(format!(
                     "invalid bit spec '{}' on field '{}::{}::{}': {err}",
                     sub.bit_spec, self.name, form.name, sub.name
@@ -211,8 +215,13 @@ pub enum OperandKind {
     Other,
 }
 
-pub fn parse_bit_spec(word_bits: u32, spec: &str) -> Result<BitFieldSpec, BitFieldSpecParseError> {
-    BitFieldSpec::from_spec_str(word_bits as u16, spec).map_err(BitFieldSpecParseError::SpecError)
+pub fn parse_bit_spec(
+    word_bits: u32,
+    spec: &str,
+    order: BitOrder,
+) -> Result<BitFieldSpec, BitFieldSpecParseError> {
+    BitFieldSpec::from_spec_str(word_bits as u16, spec, order)
+        .map_err(BitFieldSpecParseError::SpecError)
 }
 
 pub fn encode_constant(

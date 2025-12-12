@@ -63,8 +63,12 @@ impl Validator {
         word_bits: u32,
     ) {
         match expr {
-            SemanticExpr::BitExpr { spec, span } => {
-                if let Err(err) = parse_bit_spec(word_bits, spec) {
+            SemanticExpr::BitExpr {
+                spec,
+                span,
+                bit_order,
+            } => {
+                if let Err(err) = parse_bit_spec(word_bits, spec, *bit_order) {
                     self.push_validation_diagnostic(
                         "validation.enable.bit-range",
                         format!(
@@ -95,14 +99,14 @@ impl Validator {
     ) {
         match (lhs, rhs) {
             (
-                SemanticExpr::BitExpr { spec, .. },
+                SemanticExpr::BitExpr { spec, bit_order, .. },
                 SemanticExpr::Literal { value, text, span },
             )
             | (
                 SemanticExpr::Literal { value, text, span },
-                SemanticExpr::BitExpr { spec, .. },
+                SemanticExpr::BitExpr { spec, bit_order, .. },
             ) => {
-                let Ok(parsed) = parse_bit_spec(word_bits, spec) else {
+                let Ok(parsed) = parse_bit_spec(word_bits, spec, *bit_order) else {
                     return;
                 };
                 let width = parsed.data_width() as u32;
@@ -140,6 +144,7 @@ mod tests {
     use crate::soc::isa::ast::{IsaItem, SpaceAttribute, SpaceDecl, SpaceKind};
     use crate::soc::isa::error::IsaError;
     use crate::soc::isa::semantics::{BinaryOperator, SemanticExpr};
+    use crate::soc::prog::types::bitfield::BitOrder;
 
     #[test]
     fn logic_space_missing_word_size_reports_all_errors() {
@@ -180,6 +185,7 @@ mod tests {
             enable: Some(SemanticExpr::BitExpr {
                 spec: "@(0|16)".into(),
                 span: span.clone(),
+                bit_order: BitOrder::Msb0,
             }),
         });
         let err = validate_items(vec![space]).expect_err("bit expr should fail");
@@ -209,6 +215,7 @@ mod tests {
                 lhs: Box::new(SemanticExpr::BitExpr {
                     spec: "@(0|3)".into(),
                     span: span.clone(),
+                    bit_order: BitOrder::Msb0,
                 }),
                 rhs: Box::new(SemanticExpr::Literal {
                     value: 0b110,

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::soc::isa::ast::{IsaSpecification, SpaceKind};
+use crate::soc::prog::types::bitfield::BitOrder;
 use crate::soc::isa::diagnostic::{
     DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourcePosition, SourceSpan,
 };
@@ -21,6 +22,7 @@ pub struct Parser<'src> {
     allow_include: bool,
     allow_extends: bool,
     extends: Vec<PathBuf>,
+    bit_order: BitOrder,
 }
 
 impl<'src> Parser<'src> {
@@ -42,6 +44,7 @@ impl<'src> Parser<'src> {
             allow_include,
             allow_extends,
             extends: Vec::new(),
+            bit_order: BitOrder::Msb0,
         }
     }
 
@@ -60,11 +63,9 @@ impl<'src> Parser<'src> {
         }
 
         if self.diagnostics.is_empty() {
-            Ok(IsaSpecification::new(
-                self.path.clone(),
-                items,
-                self.extends.clone(),
-            ))
+            let mut spec = IsaSpecification::new(self.path.clone(), items, self.extends.clone());
+            spec.bit_order = self.bit_order;
+            Ok(spec)
         } else {
             Err(IsaError::Diagnostics {
                 phase: DiagnosticPhase::Parser,
@@ -165,6 +166,14 @@ impl<'src> Parser<'src> {
 
     pub(super) fn record_extend(&mut self, path: PathBuf) {
         self.extends.push(path);
+    }
+
+    pub(super) fn bit_order(&self) -> BitOrder {
+        self.bit_order
+    }
+
+    pub(super) fn set_bit_order(&mut self, order: BitOrder) {
+        self.bit_order = order;
     }
 
     pub(super) fn file_path(&self) -> &Path {

@@ -112,7 +112,7 @@ impl Validator {
         mask_field: &MaskField,
         word_bits: u32,
     ) {
-        let Ok(spec) = parse_bit_spec(word_bits, &subfield.bit_spec) else {
+        let Ok(spec) = parse_bit_spec(word_bits, &subfield.bit_spec, subfield.bit_order) else {
             return;
         };
         let width = spec.data_width() as u32;
@@ -130,7 +130,7 @@ impl Validator {
         mask_field: &MaskField,
         word_bits: u32,
     ) {
-        let Ok(parsed) = parse_bit_spec(word_bits, spec) else {
+        let Ok(parsed) = parse_bit_spec(word_bits, spec, mask_field.bit_order) else {
             return;
         };
         let width = parsed.data_width() as u32;

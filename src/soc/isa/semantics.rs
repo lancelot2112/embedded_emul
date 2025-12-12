@@ -4,6 +4,7 @@ use std::sync::{Arc, OnceLock};
 
 use crate::soc::isa::diagnostic::{DiagnosticLevel, DiagnosticPhase, IsaDiagnostic, SourceSpan};
 use crate::soc::isa::error::IsaError;
+use crate::soc::prog::types::bitfield::BitOrder;
 
 pub mod analyzer;
 pub mod bindings;
@@ -100,6 +101,7 @@ pub enum SemanticExpr {
     BitExpr {
         spec: String,
         span: SourceSpan,
+        bit_order: BitOrder,
     },
     BinaryOp {
         op: BinaryOperator,

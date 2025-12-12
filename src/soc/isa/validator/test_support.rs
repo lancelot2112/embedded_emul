@@ -6,6 +6,7 @@ use crate::soc::isa::ast::{
     SpaceMember, SpaceMemberDecl, SubFieldDecl,
 };
 use crate::soc::isa::diagnostic::{DiagnosticPhase, SourcePosition, SourceSpan};
+use crate::soc::prog::types::bitfield::BitOrder;
 
 use super::super::error::IsaError;
 use super::Validator;
@@ -92,5 +93,6 @@ pub(super) fn simple_subfield(name: &str) -> SubFieldDecl {
         operations: Vec::new(),
         description: None,
         bit_spec_span: None,
+        bit_order: BitOrder::Msb0,
     }
 }

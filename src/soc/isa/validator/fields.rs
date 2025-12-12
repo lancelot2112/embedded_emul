@@ -61,7 +61,7 @@ impl Validator {
             return;
         };
         for subfield in &field.subfields {
-            if let Err(err) = parse_bit_spec(size_bits, &subfield.bit_spec) {
+            if let Err(err) = parse_bit_spec(size_bits, &subfield.bit_spec, subfield.bit_order) {
                 let span = subfield
                     .bit_spec_span
                     .clone()

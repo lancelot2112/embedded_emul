@@ -649,12 +649,13 @@ fn collect_subfield_specs(
     let mut entries = Vec::with_capacity(subfields.len());
     for sub in subfields {
         let spec =
-            BitFieldSpec::from_spec_str(store_bitw as u16, &sub.bit_spec).map_err(|err| {
+            BitFieldSpec::from_spec_str(store_bitw as u16, &sub.bit_spec, sub.bit_order)
+                .map_err(|err| {
                 IsaError::Machine(format!(
                     "invalid bit spec '{}' on register '{}::{}::{}': {err}",
                     sub.bit_spec, space, register, sub.name
                 ))
-            })?;
+                })?;
         entries.push((sub.name.clone(), spec));
     }
     Ok(entries)
